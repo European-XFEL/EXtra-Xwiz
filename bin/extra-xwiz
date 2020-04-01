@@ -1,0 +1,12 @@
+#!/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/python
+# -*- coding: utf-8 -*-
+
+import re
+import sys
+sys.path.append('/home/dallanto/Devel/Prototypes/extra-xwiz')
+from extra_xwiz.workflow import main
+
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(main())
+
