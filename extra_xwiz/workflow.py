@@ -17,7 +17,7 @@ class Workflow:
         self.data_path = conf['data']['path']
         self.vds_name = conf['data']['vds_name']
         self.n_frames = conf['data']['n_frames']
-        self.n_nodes = conf['slurm']['n_cores']
+        self.n_nodes = conf['slurm']['n_nodes']
 
     def distribute(self):
         with h5py.File(self.vds_name, 'r') as f:
@@ -27,12 +27,6 @@ class Workflow:
     def manage(self):
 
         print(' xWiz - EXtra tool for pipelined SFX workflows')
-
-        if not os.path.exists(f'{self.home_dir}/.xwiz_conf.toml'):
-            print('configuration file is not present, will be created.')
-            config.create_file()
-        else:
-            print('configuration file is present.')
 
         print('TASK: create virtual data set')
         if self.interactive:
@@ -73,6 +67,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
+    if not os.path.exists(f'{home_dir}/.xwiz_conf.toml'):
+        print('configuration file is not present, will be created.')
+        config.create_file()
     workflow = Workflow(home_dir, work_dir, interactive=args.interactive)
     workflow.manage()
 
