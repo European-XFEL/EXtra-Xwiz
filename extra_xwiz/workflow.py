@@ -18,11 +18,20 @@ class Workflow:
         self.vds_name = conf['data']['vds_name']
         self.n_frames = conf['data']['n_frames']
         self.n_nodes = conf['slurm']['n_nodes']
+        self.list_prefix = conf['data']['list_prefix']
 
     def distribute(self):
         with h5py.File(self.vds_name, 'r') as f:
             self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
-        print(self.exp_ids.shape)
+        n_total = self.exp_ids.shape[0]
+        if self.n_frames > n_total:
+            self.n_frames = n_total
+        sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes)
+        for chunk, indices in enumerate(sub_indices):
+            print(len(indices), end=' ')
+            with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
+                for index in indices:
+                    f.write(f'{self.vds_name} //{index}\n')
 
     def manage(self):
 
@@ -45,15 +54,20 @@ class Workflow:
         print('TASK: prepare distributed computing')
         if self.interactive:
             _n_frames = input(f'number of frames [{self.n_frames}] > ')
-            try:
-                self.n_frames = int(_n_frames)
-            except TypeError:
-                pass
+            if _n_frames != '':
+                try:
+                    self.n_frames = int(_n_frames)
+                except TypeError:
+                    pass
             _n_nodes = input(f'number of nodes [{self.n_nodes}] > ')
-            try:
-                self.n_nodes = int(_n_nodes)
-            except TypeError:
-                pass
+            if _n_nodes != '':
+                try:
+                    self.n_nodes = int(_n_nodes)
+                except TypeError:
+                    pass
+            _list_prefix = input(f'list file-name prefix [{self.list_prefix}] > ')
+            if _list_prefix != '':
+                self.list_prefix = _list_prefix
         self.distribute()
 
 
