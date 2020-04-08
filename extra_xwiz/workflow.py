@@ -7,6 +7,7 @@ import warnings
 
 from . import config
 from .templates import PROC_BASH
+from .utilities import wait_or_cancel
 
 
 class Workflow:
@@ -53,6 +54,20 @@ class Workflow:
                 else:
                     warnings.warn('Peak-finding method not known; default kept.')
 
+            _peak_threshold = input(f'Peak threshold [{self.peak_threshold}] > ')
+            if _peak_threshold != '':
+                try:
+                    self.peak_threshold = int(_peak_threshold)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default')
+
+            _peak_snr = input(f'Peak min. signal-to-noise [{self.peak_snr}] > ')
+            if _peak_snr != '':
+                try:
+                    self.peak_snr = int(_peak_snr)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default')
+
             _index_method = input(f'indexing method to use [{self.index_method}] > ')
             if _index_method != '':
                 if _index_method in ['mosflm', 'xds', 'xgandalf']:
@@ -80,8 +95,8 @@ class Workflow:
                                  'CORES': 40,
                                  'RESOLUTION': high_res,
                                  'PEAK_METHOD': self.peak_method,
-                                 'PEAK_THRESHOLD': 600,
-                                 'PEAK_SNR': 4,
+                                 'PEAK_THRESHOLD': self.peak_threshold,
+                                 'PEAK_SNR': self.peak_snr,
                                  'INDEX_METHOD': self.index_method
                                  })
         slurm_args = ['sbatch',
@@ -90,8 +105,9 @@ class Workflow:
                       f'--array=0-{self.n_nodes}',
                       f'./{self.list_prefix}_proc-0.sh']
 
-        print(''.join(slurm_args))
-        # proc_out = subprocess.check_output(slurm_args)
+        # print(' '.join(slurm_args))
+        proc_out = subprocess.check_output(slurm_args)
+        return proc_out.decode('utf-8').split()[-1]    # job id
 
     def distribute(self):
 
@@ -169,7 +185,9 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
-        self.crystfel_from_config(high_res=self.res_lower)
+        jobid = self.crystfel_from_config(high_res=self.res_lower)
+        wait_or_cancel(jobid, self.n_nodes, self.duration)
+        print('\n-----   TASK: check unit cells -----')
 
 
 def main(argv=None):
