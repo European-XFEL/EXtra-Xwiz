@@ -138,6 +138,7 @@ class Workflow:
     def get_crystal_frames(self):
 
         hit_list = []
+        cell_ensemble = []
         with open(f'{self.list_prefix}.stream', 'r') as f:
             for ln in f:
                 if 'Event:' in ln:
@@ -148,12 +149,19 @@ class Workflow:
                     cell_constants = cell_edges + cell_angles
                     if self.cell_file != 'none' and not cell_in_tolerance(cell_constants, self.cell_file):
                         continue
+                    cell_ensemble.append(cell_constants)
                     hit_list.append(f'{self.vds_name} {event}')
         print(len(hit_list), 'frames with (reasonable) crystals found')
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
             for ln in hit_list:
                 f.write('{}\n'.format(ln))
+        return cell_ensemble
+
+    def fit_cell(self, ensemble):
+
+        distributed_parms = list(zip(*ensemble))
+        print(distributed_parms[2])
 
     def manage(self):
 
@@ -218,8 +226,14 @@ class Workflow:
         wait_or_cancel(jobid, self.n_nodes, self.n_frames, self.duration)
         self.concat()
 
-        print('\n-----   TASK: check unit cells -----')
-        self.get_crystal_frames()
+        print('\n-----   TASK: check crystal frames and fit unit cell -----')
+        cell_ensemble = self.get_crystal_frames()
+        if self.cell_file != 'none':
+            self.fit_cell(cell_ensemble)
+        else:
+            # invoke cell explorer
+            pass
+
 
 def main(argv=None):
     ap = ArgumentParser(prog="extra-xwiz")
