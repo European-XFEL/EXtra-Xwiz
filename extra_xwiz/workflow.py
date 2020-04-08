@@ -2,9 +2,11 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 import os
+import subprocess
 import warnings
 
 from . import config
+from .templates import PROC_BASH
 
 
 class Workflow:
@@ -18,6 +20,7 @@ class Workflow:
         conf = config.load_from_file()
         self.data_path = conf['data']['path']
         self.vds_name = conf['data']['vds_name']
+        self.geometry = conf['data']['geometry']
         self.n_frames = conf['data']['n_frames']
         self.list_prefix = conf['data']['list_prefix']
         self.n_nodes = conf['slurm']['n_nodes']
@@ -29,36 +32,66 @@ class Workflow:
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
         self.index_method = conf['proc_coarse']['index_method']
-        self.unit_cell = conf['proc_coarse']['unit_cell']
+        self.cell_file = conf['proc_coarse']['unit_cell']
 
-    def crystfel_from_config(self):
+    def crystfel_from_config(self, high_res=2.0):
 
-        _peak_method = input(f'Peak-finding method to use [{self.peak_method}] > ')
-        if _peak_method != '':
-            if _peak_method in ['peakfinder8', 'zaef']:
-                self.peak_method = _peak_method
-            else:
-                warnings.warn('Peak-finding method not known; default kept.')
+        cell_keyword = ''
 
-        _index_method = input (f'indexing method to use [{self.index_method}] > ')
-        if _index_method != '':
-            if _index_method in ['mosflm', 'xds', 'xgandalf']:
-                self.index_method = _index_method
-            else:
-                warnings.warn('Indexing method not known; default kept.')
+        if self.interactive:
+            _resolution = input(f'Processing resolution limit [{high_res}] > ')
+            if _resolution != '':
+                try:
+                    high_res = float(_resolution)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default')
 
-        _cell = input(f'unit cell file to use as estimation [{self.unit_cell}] OR [none] > ')
-        if _cell != '':
-            if os.path.exists(_cell):
-                self.unit_cell = _cell
-                print(' [check o.k.]')
-            else:
-                # this will include the deliberate 'none'
-                if _cell != 'none':
-                    warnings.warn('Cell file not found. Set to none.')
+            _peak_method = input(f'Peak-finding method to use [{self.peak_method}] > ')
+            if _peak_method != '':
+                if _peak_method in ['peakfinder8', 'zaef']:
+                    self.peak_method = _peak_method
                 else:
-                    warnings.warn('Processing without cell requested.')
-                self.unit_cell = None
+                    warnings.warn('Peak-finding method not known; default kept.')
+
+            _index_method = input(f'indexing method to use [{self.index_method}] > ')
+            if _index_method != '':
+                if _index_method in ['mosflm', 'xds', 'xgandalf']:
+                    self.index_method = _index_method
+                else:
+                    warnings.warn('Indexing method not known; default kept.')
+
+            _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR ["none"] > ')
+            if _cell_file != '':
+                if _cell_file == 'none':
+                    print('Processing without prior unit cell (unknown crystal geometry).')
+                self.cell_file = _cell_file
+
+        # check cell file presence; expected 'true' for default or overwrite != 'none'
+        if os.path.exists(self.cell_file):
+            cell_keyword = f'-p {self.cell_file}'
+            print(' [check o.k.]')
+        elif _cell_file != 'none':
+            warnings.warn('Processing without prior unit cell (invalid cell file).')
+
+        with open(f'{self.list_prefix}_proc-0.sh', 'w') as f:
+            f.write(PROC_BASH % {'PREFIX': self.list_prefix,
+                                 'GEOM': self.geometry,
+                                 'CRYSTAL': cell_keyword,
+                                 'CORES': 40,
+                                 'RESOLUTION': high_res,
+                                 'PEAK_METHOD': self.peak_method,
+                                 'PEAK_THRESHOLD': 600,
+                                 'PEAK_SNR': 4,
+                                 'INDEX_METHOD': self.index_method
+                                 })
+        slurm_args = ['sbatch',
+                      f'--partition={self.partition}',
+                      f'--time={self.duration}',
+                      f'--array=0-{self.n_nodes}',
+                      f'./{self.list_prefix}_proc-0.sh']
+
+        print(slurm_args)
+        #proc_out = subprocess.check_output(slurm_args)
 
     def distribute(self):
 
@@ -75,12 +108,11 @@ class Workflow:
             with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
                 for index in indices:
                     f.write(f'{self.vds_name} //{index}\n')
+        print()
 
     def manage(self):
 
-        print(' xWiz - EXtra tool for pipelined SFX workflows')
-
-        print('TASK: create virtual data set')
+        print('-----   TASK: create virtual data set   -----')
         if self.interactive:
             _data_path = input(f'Data path [{self.data_path}] > ')
             if _data_path != '':
@@ -92,9 +124,12 @@ class Workflow:
             _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
             if _vds_name != '':
                 self.vds_name = _vds_name
-        os.system(f'extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
+        if not os.path.exists(f'{self.work_dir}/{self.vds_name}'):
+            os.system(f'extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
+        else:
+            print('Requested VDS is present already.')
 
-        print('TASK: prepare distributed computing')
+        print('-----   TASK: prepare distributed computing   -----')
         if self.interactive:
             _n_frames = input(f'Number of frames [{self.n_frames}] > ')
             if _n_frames != '':
@@ -113,8 +148,16 @@ class Workflow:
                 self.list_prefix = _list_prefix
         self.distribute()
 
-        print('TASK: run CrystFEL - lower resolution limit')
+        print('-----   TASK: run CrystFEL (I) - moderate resolution   -----')
         if self.interactive:
+            _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
+            if _geometry != '':
+                if os.path.exists(_geometry):
+                    self.geometry = _geometry
+                    print(' [check o.k.]')
+                else:
+                    warnings.warn('Geometry file not found; default kept.')
+
             _partition = input(f'SLURM partition [{self.partition}] > ')
             if _partition != '':
                 if _partition in ['exfel', 'upex']:
@@ -125,13 +168,8 @@ class Workflow:
             _duration = input(f'SLURM allocation time [{self.duration}] > ')
             if _duration != '':
                 self.duration = _duration
-            _resolution = input(f'Processing resolution limit [{self.res_lower}] > ')
-            if _resolution != '':
-                try:
-                    self.res_lower = float(_resolution)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
-            self.crystfel_from_config()
+
+        self.crystfel_from_config(high_res=self.res_lower)
 
 
 def main(argv=None):
@@ -144,9 +182,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
-    if not os.path.exists(f'{home_dir}/.xwiz_conf.toml'):
+    if not os.path.exists(f'{work_dir}/.xwiz_conf.toml'):
         print('configuration file is not present, will be created.')
         config.create_file()
+    print(' xWiz - EXtra tool for pipelined SFX workflows')
     workflow = Workflow(home_dir, work_dir, interactive=args.interactive)
     workflow.manage()
 
