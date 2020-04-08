@@ -6,13 +6,22 @@ import subprocess
 import time
 
 
+def seconds(tm_str):
+    units = tm_str.split(':')
+    secs = 0
+    for i in range(len(units)):
+        j = len(units) - 1 - i
+        secs += int(units[j]) * pow(60, i)
+    print(secs)
+    return secs
+
 def calc_progress(out_logs):
     for log in out_logs:
         with open(log, "r") as f:
             ll = f.readlines()
         if not 'indexable' in ll[-1]:
             continue
-        print(log, ll[-1][4])
+        print(log, ll[-1].split()[4])
     print()
 
 
@@ -23,7 +32,7 @@ def wait_or_cancel(job_id, n_nodes, time_limit):
     out_logs = glob('slurm-*.out')
     max_time = '0:00'
     n_tasks = n_nodes
-    while n_tasks > 0 and max_time <= time_limit:
+    while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = queue.decode('utf-8').split('\n')
         n_tasks = len(tasks) - 2   # header-line + trailing '\n' always present
