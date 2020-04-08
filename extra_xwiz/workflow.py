@@ -1,4 +1,6 @@
 from argparse import ArgumentParser
+import fileinput
+from glob import glob
 import h5py
 import numpy as np
 import os
@@ -7,7 +9,7 @@ import warnings
 
 from . import config
 from .templates import PROC_BASH
-from .utilities import wait_or_cancel
+from .utilities import wait_or_cancel, cell_in_tolerance
 
 
 class Workflow:
@@ -126,6 +128,33 @@ class Workflow:
                     f.write(f'{self.vds_name} //{index}\n')
         print()
 
+    def concat(self):
+
+        chunks = glob('*.stream')
+        with open(f'{self.list_prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
+            for ln in f_in:
+                f_out.write(ln)
+
+    def get_crystal_frames(self):
+
+        hit_list = []
+        with open(f'{self.list_prefix}.stream', 'r') as f:
+            for ln in f:
+                if 'Event:' in ln:
+                    event = ln.split()[-1]  # includes '//'
+                if 'Cell parameters' in ln:
+                    cell_edges = [(10 * float(x)) for x in ln.split()[2:5]]
+                    cell_angles = [float(x) for x in ln.split()[6:9]]
+                    cell_constants = cell_edges + cell_angles
+                    if self.cell_file != 'none' and not cell_in_tolerance(cell_constants, self.cell_file):
+                        continue
+                    hit_list.append(f'{self.vds_name} {event}')
+        print(len(hit_list), 'frames with (reasonable) crystals found')
+        list_file = self.list_prefix + '_hits.lst'
+        with open(list_file, 'w') as f:
+            for ln in hit_list:
+                f.write('{}\n'.format(ln))
+
     def manage(self):
 
         print('\n-----   TASK: create virtual data set   -----')
@@ -187,8 +216,10 @@ class Workflow:
 
         jobid = self.crystfel_from_config(high_res=self.res_lower)
         wait_or_cancel(jobid, self.n_nodes, self.n_frames, self.duration)
-        print('\n-----   TASK: check unit cells -----')
+        self.concat()
 
+        print('\n-----   TASK: check unit cells -----')
+        self.get_crystal_frames()
 
 def main(argv=None):
     ap = ArgumentParser(prog="extra-xwiz")

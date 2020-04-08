@@ -51,5 +51,23 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
         times = [ln.split()[5] for ln in tasks[1:-1]]
         if n_tasks > 0:
             max_time = max(times)
-        calc_progress(out_logs, n_total)
+        calc_progress(out_logs, (n_total / n_nodes))
         time.sleep(1)
+
+
+def cell_in_tolerance(constants, reference):
+    const_name = ['a', 'b', 'c', 'al', 'be', 'ga']
+    refr_value = []
+    with open(reference, 'r') as f:
+        for ln in f:
+            if ' = ' not in ln:
+                continue
+            if ln.split()[0] in const_name:
+                refr_value.append(float(ln.split()[2]))
+    for i in range(6):
+        if constants[i] < 0.95 * refr_value[i]:
+            return False
+        if constants[i] > 1.05 * refr_value[i]:
+            return False
+    return True
+
