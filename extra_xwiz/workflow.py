@@ -186,7 +186,7 @@ class Workflow:
                 self.duration = _duration
 
         jobid = self.crystfel_from_config(high_res=self.res_lower)
-        wait_or_cancel(jobid, self.n_nodes, self.duration)
+        wait_or_cancel(jobid, self.n_nodes, self.n_frames, self.duration)
         print('\n-----   TASK: check unit cells -----')
 
 
