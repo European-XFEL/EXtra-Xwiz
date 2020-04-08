@@ -90,8 +90,8 @@ class Workflow:
                       f'--array=0-{self.n_nodes}',
                       f'./{self.list_prefix}_proc-0.sh']
 
-        print(slurm_args)
-        #proc_out = subprocess.check_output(slurm_args)
+        print(''.join(slurm_args))
+        # proc_out = subprocess.check_output(slurm_args)
 
     def distribute(self):
 
@@ -112,7 +112,7 @@ class Workflow:
 
     def manage(self):
 
-        print('-----   TASK: create virtual data set   -----')
+        print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:
             _data_path = input(f'Data path [{self.data_path}] > ')
             if _data_path != '':
@@ -129,7 +129,7 @@ class Workflow:
         else:
             print('Requested VDS is present already.')
 
-        print('-----   TASK: prepare distributed computing   -----')
+        print('\n-----   TASK: prepare distributed computing   -----')
         if self.interactive:
             _n_frames = input(f'Number of frames [{self.n_frames}] > ')
             if _n_frames != '':
@@ -148,7 +148,7 @@ class Workflow:
                 self.list_prefix = _list_prefix
         self.distribute()
 
-        print('-----   TASK: run CrystFEL (I) - moderate resolution   -----')
+        print('\n-----   TASK: run CrystFEL (I) - moderate resolution   -----')
         if self.interactive:
             _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
             if _geometry != '':

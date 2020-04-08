@@ -6,9 +6,9 @@ CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028"
 n_frames = 200000
-vds_name = "xmpl_2_vds.cxi"
-list_prefix = "xmpl_2_frames"
-geometry = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0002/agipd_mar18_v22.geom"
+vds_name = "xmpl_28_vds.cxi"
+list_prefix = "xmpl_28_frames"
+geometry = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028/agipd_2450_vds_v4.geom"
 
 [slurm]
 partition = "exfel"
