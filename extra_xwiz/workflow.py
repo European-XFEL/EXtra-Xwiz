@@ -9,7 +9,7 @@ import warnings
 
 from . import config
 from .templates import PROC_BASH
-from .utilities import wait_or_cancel, cell_in_tolerance
+from .utilities import (wait_or_cancel, cell_in_tolerance, fit_gauss_curve)
 
 
 class Workflow:
@@ -160,8 +160,10 @@ class Workflow:
 
     def fit_cell(self, ensemble):
 
+        constant_name = ['a', 'b', 'c', 'alpha', 'beta', 'gamma']
         distributed_parms = list(zip(*ensemble))
-        print(distributed_parms[2])
+        print('Distribution for', constant_name[2])
+        fit_gauss_curve(distributed_parms[2])
 
     def manage(self):
 

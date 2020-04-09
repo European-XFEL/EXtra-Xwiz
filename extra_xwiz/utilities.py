@@ -2,8 +2,42 @@
 
 from getpass import getuser
 from glob import glob
+import numpy as np
+from scipy.optimize import curve_fit
 import subprocess
 import time
+
+
+def estimate_moments(sample):
+    """Calculate the 'naive' height, mean and stddev of a sample,
+       to serve as starting values (estimates) for a Gauss fit.
+    """
+    return np.max(sample), np.mean(sample), np.std(sample)
+
+
+def print_hist_bars(bins, freqs, length=80, fill='■'):
+    scale_factor = float(length) / max(freqs)
+    for i, freq in enumerate(freqs):
+        bar = fill * (int(scale_factor) * freq)
+        print('{:6.2f} {}'.format(bins[i], bar))
+
+
+def gauss_func(x, *p):
+    amp, mu, sigma = p       # unpack parameters: amplitude, mean, stddev
+    return amp * np.exp(-(x - mu)**2/(2.*sigma**2))
+
+
+def fit_gauss_curve(sample):
+    """Fit a Gaussian as model function to observed distribution data,
+       which are derived from a sample by histogram-binning
+       """
+    p0 = estimate_moments(sample)
+    y, bins = np.histogram(sample, bins=10)  # y: frequency (not density)
+    x = (bins[:-1] + bins[1:]) / 2  # take bin centres as x
+    print_hist_bars(x, y, length=50)
+    p, var_matrix = curve_fit(gauss_func, x, y, p0=p0)
+    print(p)
+    return p[1]
 
 
 def seconds(tm_str):
