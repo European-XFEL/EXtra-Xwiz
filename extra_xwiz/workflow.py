@@ -162,8 +162,10 @@ class Workflow:
 
         constant_name = ['a', 'b', 'c', 'alpha', 'beta', 'gamma']
         distributed_parms = list(zip(*ensemble))
-        print('Distribution for', constant_name[2])
-        fit_gauss_curve(distributed_parms[2])
+        for i in range(6):
+            print('Distribution for', constant_name[i])
+            fit_gauss_curve(distributed_parms[i])
+            print()
 
     def manage(self):
 

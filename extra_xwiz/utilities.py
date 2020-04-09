@@ -32,6 +32,7 @@ def fit_gauss_curve(sample):
        which are derived from a sample by histogram-binning
        """
     p0 = estimate_moments(sample)
+    print(p0)
     y, bins = np.histogram(sample, bins=10)  # y: frequency (not density)
     x = (bins[:-1] + bins[1:]) / 2  # take bin centres as x
     print_hist_bars(x, y, length=50)
@@ -100,9 +101,9 @@ def cell_in_tolerance(constants, reference):
             if ln.split()[0] in const_name:
                 refr_value.append(float(ln.split()[2]))
     for i in range(6):
-        if constants[i] < 0.95 * refr_value[i]:
+        if constants[i] < 0.9 * refr_value[i]:
             return False
-        if constants[i] > 1.05 * refr_value[i]:
+        if constants[i] > 1.1 * refr_value[i]:
             return False
     return True
 
