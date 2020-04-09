@@ -89,6 +89,7 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
             max_time = max(times)
         calc_progress(out_logs, (n_total / n_nodes))
         time.sleep(1)
+    print()
 
 
 def cell_in_tolerance(constants, reference):

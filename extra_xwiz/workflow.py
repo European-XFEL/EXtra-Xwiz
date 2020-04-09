@@ -252,7 +252,9 @@ def main(argv=None):
     if not os.path.exists(f'{work_dir}/.xwiz_conf.toml'):
         print('configuration file is not present, will be created.')
         config.create_file()
+    print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
+    print(48 * '~')
     workflow = Workflow(home_dir, work_dir, interactive=args.interactive)
     workflow.manage()
 
