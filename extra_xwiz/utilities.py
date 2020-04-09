@@ -20,7 +20,7 @@ def print_progress_bar(i, n, length=80, fill='█'):
     percent = '{0:.1f}'.format(100 * (i / float(n)))
     filled_len = int(length * i // n)
     bar = fill * filled_len + '-' * (length - filled_len)
-    print('\rProgress: |%s| %s%% complete' % (bar, percent), end='\r')
+    print('\r Progress: |%s| %s%% complete' % (bar, percent), end='\r')
 
 
 def calc_progress(out_logs, n_total):
@@ -28,10 +28,11 @@ def calc_progress(out_logs, n_total):
     for log in out_logs:
         with open(log, "r") as f:
             ll = f.readlines()
-        if not 'indexable' in ll[-1]:
-            continue
-        # print(log, ll[-1].split()[4])
-        n_current.append(int(ll[-1].split()[4]))
+        if 'indexable' in ll[-1]:
+            # print(log, ll[-1].split()[4])
+            n_current.append(int(ll[-1].split()[4]))
+        elif 'Final:' in ll[-1]:
+            n_current.append(n_total)
     if len(n_current) > 0:
         n_slowest = min(n_current)
         print_progress_bar(n_slowest, n_total, length=50)
