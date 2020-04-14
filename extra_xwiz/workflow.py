@@ -9,7 +9,8 @@ import warnings
 
 from . import config
 from .templates import PROC_BASH
-from .utilities import (wait_or_cancel, cell_in_tolerance, fit_gauss_curve)
+from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
+                        replace_cell)
 
 
 class Workflow:
@@ -36,6 +37,8 @@ class Workflow:
         self.peak_snr = conf['proc_coarse']['peak_snr']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
+        self.hit_list = []
+        self.cell_ensemble = []
 
     def crystfel_from_config(self, high_res=2.0):
 
@@ -135,37 +138,16 @@ class Workflow:
             for ln in f_in:
                 f_out.write(ln)
 
-    def get_crystal_frames(self):
+    def filter_crystals(self):
 
-        hit_list = []
-        cell_ensemble = []
-        with open(f'{self.list_prefix}.stream', 'r') as f:
-            for ln in f:
-                if 'Event:' in ln:
-                    event = ln.split()[-1]  # includes '//'
-                if 'Cell parameters' in ln:
-                    cell_edges = [(10 * float(x)) for x in ln.split()[2:5]]
-                    cell_angles = [float(x) for x in ln.split()[6:9]]
-                    cell_constants = cell_edges + cell_angles
-                    if self.cell_file != 'none' and not cell_in_tolerance(cell_constants, self.cell_file):
-                        continue
-                    cell_ensemble.append(cell_constants)
-                    hit_list.append(f'{self.vds_name} {event}')
-        print(len(hit_list), 'frames with (reasonable) crystals found')
+        self.hit_list, self.cell_ensemble = \
+            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
-            for ln in hit_list:
-                f.write('{}\n'.format(ln))
-        return cell_ensemble
-
-    def fit_cell(self, ensemble):
-
-        constant_name = ['a', 'b', 'c', 'alpha', 'beta', 'gamma']
-        distributed_parms = list(zip(*ensemble))
-        for i in range(6):
-            print('Distribution for', constant_name[i])
-            fit_gauss_curve(distributed_parms[i])
-            print()
+            for hit_event in self.hit_list:
+                f.write(f'{self.vds_name} {hit_event}\n')
+        refined_cell = fit_unit_cell(self.cell_ensemble)
+        replace_cell(self.cell_file, refined_cell)
 
     def manage(self):
 
@@ -226,17 +208,18 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
-        jobid = self.crystfel_from_config(high_res=self.res_lower)
-        wait_or_cancel(jobid, self.n_nodes, self.n_frames, self.duration)
+        job_id = self.crystfel_from_config(high_res=self.res_lower)
+        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
         self.concat()
 
         print('\n-----   TASK: check crystal frames and fit unit cell -----')
-        cell_ensemble = self.get_crystal_frames()
         if self.cell_file != 'none':
-            self.fit_cell(cell_ensemble)
+            self.filter_crystals()
         else:
             # invoke cell explorer
             pass
+
+        print('\n-----   TASK: run CrystFEL (II) - higher resolution and refined cell ------')
 
 
 def main(argv=None):
