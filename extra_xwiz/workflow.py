@@ -8,7 +8,7 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import PROC_BASH
+from .templates import PROC_BASH_SLURM, PROC_BASH_DIRECT
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
                         replace_cell)
 
@@ -93,26 +93,46 @@ class Workflow:
         elif _cell_file != 'none':
             warnings.warn('Processing without prior unit cell (invalid cell file).')
 
+        return high_res, cell_keyword
+
+    def process_with_slurm(self, high_res, cell_keyword):
+
         with open(f'{self.list_prefix}_proc-0.sh', 'w') as f:
-            f.write(PROC_BASH % {'PREFIX': self.list_prefix,
-                                 'GEOM': self.geometry,
-                                 'CRYSTAL': cell_keyword,
-                                 'CORES': 40,
-                                 'RESOLUTION': high_res,
-                                 'PEAK_METHOD': self.peak_method,
-                                 'PEAK_THRESHOLD': self.peak_threshold,
-                                 'PEAK_SNR': self.peak_snr,
-                                 'INDEX_METHOD': self.index_method
-                                 })
+            f.write(PROC_BASH_SLURM % {'PREFIX': self.list_prefix,
+                                       'GEOM': self.geometry,
+                                       'CRYSTAL': cell_keyword,
+                                       'CORES': 40,
+                                       'RESOLUTION': high_res,
+                                       'PEAK_METHOD': self.peak_method,
+                                       'PEAK_THRESHOLD': self.peak_threshold,
+                                       'PEAK_SNR': self.peak_snr,
+                                       'INDEX_METHOD': self.index_method
+                                       })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
                       f'--time={self.duration}',
                       f'--array=0-{self.n_nodes}',
                       f'./{self.list_prefix}_proc-0.sh']
-
         # print(' '.join(slurm_args))
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]    # job id
+
+    def process_directly(self, high_res, cell_keyword):
+
+        with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
+            f.write(PROC_BASH_DIRECT % {'PREFIX': self.list_prefix,
+                                        'GEOM': self.geometry,
+                                        'CRYSTAL': cell_keyword,
+                                        'CORES': 40,
+                                        'RESOLUTION': high_res,
+                                        'PEAK_METHOD': self.peak_method,
+                                        'PEAK_THRESHOLD': self.peak_threshold,
+                                        'PEAK_SNR': self.peak_snr,
+                                        'INDEX_METHOD': self.index_method
+                                        })
+        proc_out = subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
+        return proc_out.decode('utf-8').split()[-1]    # job id
+
 
     def distribute(self):
 
@@ -148,6 +168,7 @@ class Workflow:
                 f.write(f'{self.vds_name} {hit_event}\n')
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
+        self.cell_file = f'{self.cell_file}_refined'
 
     def manage(self):
 
@@ -208,18 +229,23 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
-        job_id = self.crystfel_from_config(high_res=self.res_lower)
+        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_lower)
+        job_id = self.process_with_slurm(res_limit, cell_keyword)
         wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
         self.concat()
 
         print('\n-----   TASK: check crystal frames and fit unit cell -----')
         if self.cell_file != 'none':
-            self.filter_crystals()
+            self.filter_crystals()  # this will change the cell file eventually
         else:
             # invoke cell explorer
             pass
 
         print('\n-----   TASK: run CrystFEL (II) - higher resolution and refined cell ------')
+        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
+        job_id = self.process_directly(res_limit, cell_keyword)
+
+        print('\n-----   TASK: merge data and create statistics -----')
 
 
 def main(argv=None):

@@ -28,7 +28,7 @@ n_cores = 40
 resolution = 2.0
 """
 
-PROC_BASH = """\
+PROC_BASH_SLURM = """\
 #!/bin/bash
 
 indexamajig \\
@@ -44,3 +44,15 @@ indexamajig \\
   --no-non-hits-in-stream  
 """
 
+PROC_BASH_DIRECT = """\
+  -i %(PREFIX)s_hits.lst \\
+  -o %(PREFIX)s_hits.stream \\
+  -g %(GEOM)s %(CRYSTAL)s \\
+  -j %(CORES)s \\
+  --highres=%(RESOLUTION)s \\
+  --peaks=%(PEAK_METHOD)s \\
+  --min-snr=%(PEAK_SNR)s \\
+  --threshold=%(PEAK_THRESHOLD)s \\
+  --indexing=%(INDEX_METHOD)s \\
+  --no-non-hits-in-stream  
+"""

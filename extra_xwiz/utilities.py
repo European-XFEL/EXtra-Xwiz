@@ -89,7 +89,7 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     """
     print(' Waiting for job-array', job_id)
     time.sleep(3)
-    out_logs = glob('slurm-*.out')
+    out_logs = glob(f'slurm-{job_id}_*.out')
     max_time = '0:00'
     n_tasks = n_nodes
     while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
