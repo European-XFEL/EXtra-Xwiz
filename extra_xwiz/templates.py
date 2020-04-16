@@ -45,6 +45,9 @@ indexamajig \\
 """
 
 PROC_BASH_DIRECT = """\
+#!/bin/bash
+
+indexamajig \\
   -i %(PREFIX)s_hits.lst \\
   -o %(PREFIX)s_hits.stream \\
   -g %(GEOM)s %(CRYSTAL)s \\
