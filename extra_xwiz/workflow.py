@@ -130,8 +130,7 @@ class Workflow:
                                         'PEAK_SNR': self.peak_snr,
                                         'INDEX_METHOD': self.index_method
                                         })
-        proc_out = subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
-        return proc_out.decode('utf-8').split()[-1]    # job id
+        subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
 
 
     def distribute(self):
@@ -169,6 +168,38 @@ class Workflow:
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
         self.cell_file = f'{self.cell_file}_refined'
+
+    def merge_bragg_obs(self):
+
+        symmetry = input('Laue-class symmetry to use > ')
+        # merge using partialator
+        partialator_args = ['partialator',
+                            '-i', f'{self.list_prefix}_hits.stream',
+                            '-o', f'{self.list_prefix}_merged.hkl',
+                            '-y', symmetry,
+                            '--iterations=1',
+                            '--model=unity']
+        subprocess.check_output(partialator_args)
+        # create resolution-bin tables
+        stats_input = [f'{self.list_prefix}_merged.hkl',
+                            f'{self.list_prefix}_merged.hkl1',
+                            f'{self.list_prefix}_merged.hkl2']
+        stats_output = ['completeness', 'cchalf', 'ccstar', 'rsplit']
+        stats_foms = ['--fom=CC', '--fom=CCstar', '--fom=Rsplit']
+        fixed_options = [f'--highres={self.res_higher}',
+                         '-y', symmetry,
+                         '-p', f'{self.cell_file}_refined']
+        for i in range(4):
+            stats_args = ['check_hkl'] if i == 0 else ['compare_hkl']
+            if i == 0:
+                stats_args += stats_input[0]
+            else:
+                stats_args.extend(stats_input[1:])
+            stats_args.extend(fixed_options)
+            stats_args += f'--shell-file=shells_{stats_output[i]}.dat'
+            if i > 0:
+                stats_args += stats_foms[i-1]
+            subprocess.check_output(stats_args)
 
     def manage(self):
 
@@ -208,7 +239,7 @@ class Workflow:
                 self.list_prefix = _list_prefix
         self.distribute()
 
-        print('\n-----   TASK: run CrystFEL (I) - moderate resolution   -----')
+        print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
             _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
             if _geometry != '':
@@ -241,11 +272,12 @@ class Workflow:
             # invoke cell explorer
             pass
 
-        print('\n-----   TASK: run CrystFEL (II) - higher resolution and refined cell ------')
+        print('\n-----   TASK: run CrystFEL (II) with refined cell ------')
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
-        job_id = self.process_directly(res_limit, cell_keyword)
+        self.process_directly(res_limit, cell_keyword)
 
         print('\n-----   TASK: merge data and create statistics -----')
+        self.merge_bragg_obs()
 
 
 def main(argv=None):
