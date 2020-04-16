@@ -88,10 +88,14 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     """ Loop until queue is empty or time-limit reached
     """
     print(' Waiting for job-array', job_id)
-    time.sleep(3)
-    out_logs = glob(f'slurm-{job_id}_*.out')
+    out_logs = []
+    # wait until all tasks have passed queueing stage and N(logs) == N(tasks)
+    while len(out_logs) < n_nodes:
+        time.sleep(3)
+        out_logs = glob(f'slurm-{job_id}_*.out')
     max_time = '0:00'
     n_tasks = n_nodes
+    # wait until all tasks have finished, hence vanished from the squeue list
     while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = queue.decode('utf-8').split('\n')

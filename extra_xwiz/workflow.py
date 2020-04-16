@@ -182,23 +182,23 @@ class Workflow:
         subprocess.check_output(partialator_args)
         # create resolution-bin tables
         stats_input = [f'{self.list_prefix}_merged.hkl',
-                            f'{self.list_prefix}_merged.hkl1',
-                            f'{self.list_prefix}_merged.hkl2']
+                       f'{self.list_prefix}_merged.hkl1',
+                       f'{self.list_prefix}_merged.hkl2']
         stats_output = ['completeness', 'cchalf', 'ccstar', 'rsplit']
         stats_foms = ['--fom=CC', '--fom=CCstar', '--fom=Rsplit']
         fixed_options = [f'--highres={self.res_higher}',
                          '-y', symmetry,
-                         '-p', f'{self.cell_file}_refined']
+                         '-p', self.cell_file]
         for i in range(4):
             stats_args = ['check_hkl'] if i == 0 else ['compare_hkl']
             if i == 0:
-                stats_args += stats_input[0]
+                stats_args.extend([stats_input[0]])
             else:
                 stats_args.extend(stats_input[1:])
             stats_args.extend(fixed_options)
-            stats_args += f'--shell-file=shells_{stats_output[i]}.dat'
+            stats_args.extend([f'--shell-file=shells_{stats_output[i]}.dat'])
             if i > 0:
-                stats_args += stats_foms[i-1]
+                stats_args.extend([stats_foms[i-1]])
             subprocess.check_output(stats_args)
 
     def manage(self):
