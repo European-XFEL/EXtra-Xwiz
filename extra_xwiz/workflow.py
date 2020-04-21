@@ -8,7 +8,7 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import PROC_BASH_SLURM, PROC_BASH_DIRECT
+from .templates import PROC_BASH_SLURM, PROC_BASH_DIRECT, POINT_GROUPS
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
                         replace_cell)
 
@@ -35,8 +35,11 @@ class Workflow:
         self.peak_method = conf['proc_coarse']['peak_method']
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
+        self.peak_min_px = conf['proc_coarse']['peak_min_px']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
+        self.point_group = conf['merging']['point_group']
+        self.max_adu = conf['merging']['max_adu']
         self.hit_list = []
         self.cell_ensemble = []
 
@@ -132,7 +135,6 @@ class Workflow:
                                         })
         subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
 
-
     def distribute(self):
 
         with h5py.File(self.vds_name, 'r') as f:
@@ -171,12 +173,11 @@ class Workflow:
 
     def merge_bragg_obs(self):
 
-        symmetry = input('Laue-class symmetry to use > ')
         # merge using partialator
         partialator_args = ['partialator',
                             '-i', f'{self.list_prefix}_hits.stream',
                             '-o', f'{self.list_prefix}_merged.hkl',
-                            '-y', symmetry,
+                            '-y', self.point_group,
                             '--iterations=1',
                             '--model=unity']
         subprocess.check_output(partialator_args)
@@ -187,8 +188,9 @@ class Workflow:
         stats_output = ['completeness', 'cchalf', 'ccstar', 'rsplit']
         stats_foms = ['--fom=CC', '--fom=CCstar', '--fom=Rsplit']
         fixed_options = [f'--highres={self.res_higher}',
-                         '-y', symmetry,
-                         '-p', self.cell_file]
+                         '-y', self.point_group,
+                         '-p', self.cell_file,
+                         f'--max-adu={self.max_adu}']
         for i in range(4):
             stats_args = ['check_hkl'] if i == 0 else ['compare_hkl']
             if i == 0:
@@ -277,6 +279,15 @@ class Workflow:
         self.process_directly(res_limit, cell_keyword)
 
         print('\n-----   TASK: merge data and create statistics -----')
+        if self.interactive:
+            _point_group = input(f'Point group symmetry [{self.point_group}] > ')
+            if _point_group != '':
+                if _point_group in POINT_GROUPS:
+                    self.point_group = _point_group
+                else:
+                    warnings.warn('Point group not recognized')
+                    print('[default kept]')
+
         self.merge_bragg_obs()
 
 

@@ -2,6 +2,9 @@
 Templates for configuration and script outlines
 """
 
+POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
+                '23', '432']
+
 CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028"
@@ -20,12 +23,17 @@ resolution = 4.0
 peak_method = "peakfinder8"
 peak_threshold = 800
 peak_snr = 5
+peak_min_px = 1 
 index_method = "mosflm"
 unit_cell = "hewl.cell"
 n_cores = 40
 
 [proc_fine]
 resolution = 2.0
+
+[merging]
+point_group = "422"
+max_adu = 100000
 """
 
 PROC_BASH_SLURM = """\
