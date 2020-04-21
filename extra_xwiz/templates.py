@@ -48,6 +48,7 @@ indexamajig \\
   --peaks=%(PEAK_METHOD)s \\
   --min-snr=%(PEAK_SNR)s \\
   --threshold=%(PEAK_THRESHOLD)s \\
+  --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
   --no-non-hits-in-stream  
 """
@@ -64,6 +65,7 @@ indexamajig \\
   --peaks=%(PEAK_METHOD)s \\
   --min-snr=%(PEAK_SNR)s \\
   --threshold=%(PEAK_THRESHOLD)s \\
+  --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
   --no-non-hits-in-stream  
 """

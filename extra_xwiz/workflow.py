@@ -76,6 +76,13 @@ class Workflow:
                 except TypeError:
                     warnings.warn('Wrong type; kept at default')
 
+            _peak_min_px = input(f'Peak min. pixel count [{self.peak_min_px}] > ')
+            if _peak_min_px != '':
+                try:
+                    self.peak_min_px = int(_peak_min_px)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default')
+
             _index_method = input(f'indexing method to use [{self.index_method}] > ')
             if _index_method != '':
                 if _index_method in ['mosflm', 'xds', 'xgandalf']:
@@ -108,6 +115,7 @@ class Workflow:
                                        'RESOLUTION': high_res,
                                        'PEAK_METHOD': self.peak_method,
                                        'PEAK_THRESHOLD': self.peak_threshold,
+                                       'PEAK_MIN_PX': self.peak_min_px,
                                        'PEAK_SNR': self.peak_snr,
                                        'INDEX_METHOD': self.index_method
                                        })
@@ -130,6 +138,7 @@ class Workflow:
                                         'RESOLUTION': high_res,
                                         'PEAK_METHOD': self.peak_method,
                                         'PEAK_THRESHOLD': self.peak_threshold,
+                                        'PEAK_MIN_PX': self.peak_min_px,
                                         'PEAK_SNR': self.peak_snr,
                                         'INDEX_METHOD': self.index_method
                                         })
