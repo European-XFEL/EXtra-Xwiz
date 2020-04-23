@@ -187,6 +187,7 @@ class Workflow:
                             '-i', f'{self.list_prefix}_hits.stream',
                             '-o', f'{self.list_prefix}_merged.hkl',
                             '-y', self.point_group,
+                            f'--max-adu={self.max_adu}',
                             '--iterations=1',
                             '--model=unity']
         subprocess.check_output(partialator_args)
@@ -198,8 +199,7 @@ class Workflow:
         stats_foms = ['--fom=CC', '--fom=CCstar', '--fom=Rsplit']
         fixed_options = [f'--highres={self.res_higher}',
                          '-y', self.point_group,
-                         '-p', self.cell_file,
-                         f'--max-adu={self.max_adu}']
+                         '-p', self.cell_file]
         for i in range(4):
             stats_args = ['check_hkl'] if i == 0 else ['compare_hkl']
             if i == 0:
