@@ -98,8 +98,10 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     # wait until all tasks have finished, hence vanished from the squeue list
     while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
-        tasks = queue.decode('utf-8').split('\n')
-        n_tasks = len(tasks) - 2   # header-line + trailing '\n' always present
+        tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
+        # with the job_id check, the following would be inappropriate
+        # n_tasks = len(tasks) - 2   # header-line + trailing '\n' always present
+        n_tasks = len(tasks)
         times = [ln.split()[5] for ln in tasks[1:-1]]
         if n_tasks > 0:
             max_time = max(times)

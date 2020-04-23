@@ -100,7 +100,7 @@ class Workflow:
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
             print(' [check o.k.]')
-        elif _cell_file != 'none':
+        elif self.cell_file != 'none':
             warnings.warn('Processing without prior unit cell (invalid cell file).')
 
         return high_res, cell_keyword
