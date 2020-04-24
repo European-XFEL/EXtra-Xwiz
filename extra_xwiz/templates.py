@@ -39,6 +39,10 @@ max_adu = 100000
 PROC_BASH_SLURM = """\
 #!/bin/bash
 
+module load spack
+spack load crystfel
+module load ccp4/7.0
+
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
@@ -56,6 +60,10 @@ indexamajig \\
 PROC_BASH_DIRECT = """\
 #!/bin/bash
 
+module load spack
+spack load crystfel
+module load ccp4/7.0
+
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
   -o %(PREFIX)s_hits.stream \\
@@ -68,4 +76,19 @@ indexamajig \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
   --no-non-hits-in-stream  
+"""
+
+PARTIALATOR_CALL = """\
+#!/bin/bash
+
+module load spack
+spack load crystfel
+
+partialator \\
+    -i %(PREFIX)_hits.stream \\
+    -o %(PREFIX)_merged.hkl \\
+    -y %(POINT_GROUP) \\
+    --max-adu=%(MAX_ADU) \\
+    --iterations=1 \\
+    --model=unity
 """
