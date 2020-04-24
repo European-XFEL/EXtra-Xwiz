@@ -163,10 +163,19 @@ class Workflow:
 
     def concat(self):
 
-        chunks = glob('*.stream')
+        chunks = glob(f'{self.list_prefix}_*.stream')
         with open(f'{self.list_prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
             for ln in f_in:
                 f_out.write(ln)
+
+    def clean_up(self, job_id):
+
+        input_lists = glob(f'{self.list_prefix}_*.lst')
+        stream_out = glob(f'{self.list_prefix}_*.stream')
+        slurm_out = glob(f'slurm-{job_id}_*.out')
+        file_items = input_lists + stream_out + slurm_out
+        for item in file_items:
+            os.remove(item)
 
     def filter_crystals(self):
 
@@ -275,6 +284,7 @@ class Workflow:
         job_id = self.process_with_slurm(res_limit, cell_keyword)
         wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
         self.concat()
+        self.clean_up(job_id)
 
         print('\n-----   TASK: check crystal frames and fit unit cell -----')
         if self.cell_file != 'none':
