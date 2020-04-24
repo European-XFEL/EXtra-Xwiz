@@ -8,7 +8,8 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import PROC_BASH_SLURM, PROC_BASH_DIRECT, POINT_GROUPS
+from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
+                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, POINT_GROUPS)
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
                         replace_cell)
 
@@ -39,6 +40,8 @@ class Workflow:
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
         self.point_group = conf['merging']['point_group']
+        self.scale_model = conf['merging']['scaling_model']
+        self.scale_iter = conf['merging']['scaling_iterations']
         self.max_adu = conf['merging']['max_adu']
         self.hit_list = []
         self.cell_ensemble = []
@@ -177,49 +180,55 @@ class Workflow:
         for item in file_items:
             os.remove(item)
 
-    def filter_crystals(self):
+    def write_hit_list(self):
 
-        self.hit_list, self.cell_ensemble = \
-            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
             for hit_event in self.hit_list:
                 f.write(f'{self.vds_name} {hit_event}\n')
+
+    def fit_filtered_crystals(self):
+
+        self.hit_list, self.cell_ensemble = \
+            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+        self.write_hit_list()
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
         self.cell_file = f'{self.cell_file}_refined'
 
     def merge_bragg_obs(self):
 
-        # merge using partialator
-        partialator_args = ['partialator',
-                            '-i', f'{self.list_prefix}_hits.stream',
-                            '-o', f'{self.list_prefix}_merged.hkl',
-                            '-y', self.point_group,
-                            f'--max-adu={self.max_adu}',
-                            '--iterations=1',
-                            '--model=unity']
-        subprocess.check_output(partialator_args)
-        # create resolution-bin tables
-        stats_input = [f'{self.list_prefix}_merged.hkl',
-                       f'{self.list_prefix}_merged.hkl1',
-                       f'{self.list_prefix}_merged.hkl2']
-        stats_output = ['completeness', 'cchalf', 'ccstar', 'rsplit']
-        stats_foms = ['--fom=CC', '--fom=CCstar', '--fom=Rsplit']
-        fixed_options = [f'--highres={self.res_higher}',
-                         '-y', self.point_group,
-                         '-p', self.cell_file]
-        for i in range(4):
-            stats_args = ['check_hkl'] if i == 0 else ['compare_hkl']
-            if i == 0:
-                stats_args.extend([stats_input[0]])
-            else:
-                stats_args.extend(stats_input[1:])
-            stats_args.extend(fixed_options)
-            stats_args.extend([f'--shell-file=shells_{stats_output[i]}.dat'])
-            if i > 0:
-                stats_args.extend([stats_foms[i-1]])
-            subprocess.check_output(stats_args)
+        # scale and average using partialator
+        with open('_tmp_partialator.sh', 'w') as f:
+            f.write(PARTIALATOR_WRAP % {
+                'PREFIX': self.list_prefix,
+                'POINT_GROUP': self.point_group,
+                'N_ITER': self.scale_iter,
+                'MODEL': self.scale_model,
+                'MAX_ADU': self.max_adu
+            })
+        subprocess.check_output(['sh', '_tmp_partialator.sh'])
+        # create simple resolution-bin table
+        with open('_tmp_table_gen.sh', 'w') as f:
+            f.write(CHECK_HKL_WRAP % {
+                'PREFIX': self.list_prefix,
+                'POINT_GROUP': self.point_group,
+                'UNIT_CELL': self.cell_file,
+                'HIGH_RES': self.res_higher
+            })
+        subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'])
+        # create resolution-bin tables based on half-sets
+        for i in range(3):
+            with open(f'_tmp_table_gen{i}.sh', 'w') as f:
+                f.write(COMPARE_HKL_WRAP % {
+                    'PREFIX': self.list_prefix,
+                    'POINT_GROUP': self.point_group,
+                    'UNIT_CELL': self.cell_file,
+                    'HIGH_RES': self.res_higher,
+                    'FOM': ['CC', 'CCstar', 'Rsplit'][i],
+                    'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
+                })
+            subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'])
 
     def manage(self):
 
@@ -288,7 +297,7 @@ class Workflow:
 
         print('\n-----   TASK: check crystal frames and fit unit cell -----')
         if self.cell_file != 'none':
-            self.filter_crystals()  # this will change the cell file eventually
+            self.fit_filtered_crystals()  # this will change the cell file eventually
         else:
             # invoke cell explorer
             pass

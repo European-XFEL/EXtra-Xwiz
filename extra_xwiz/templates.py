@@ -33,6 +33,8 @@ resolution = 2.0
 
 [merging]
 point_group = "422"
+scaling_model = "unity"
+scaling_iterations = 1
 max_adu = 100000
 """
 
@@ -78,17 +80,48 @@ indexamajig \\
   --no-non-hits-in-stream  
 """
 
-PARTIALATOR_CALL = """\
+PARTIALATOR_WRAP = """\
 #!/bin/bash
 
 module load spack
 spack load crystfel
 
 partialator \\
-    -i %(PREFIX)_hits.stream \\
-    -o %(PREFIX)_merged.hkl \\
-    -y %(POINT_GROUP) \\
-    --max-adu=%(MAX_ADU) \\
-    --iterations=1 \\
-    --model=unity
+    -i %(PREFIX)s_hits.stream \\
+    -o %(PREFIX)s_merged.hkl \\
+    -y %(POINT_GROUP)s \\
+    --max-adu=%(MAX_ADU)s \\
+    --iterations=%(N_ITER)s \\
+    --model=%(MODEL)s
+"""
+
+CHECK_HKL_WRAP = """\
+#!/bin/bash
+
+module load spack
+spack load crystfel
+
+check_hkl \\
+    %(PREFIX)s_merged.hkl \\
+    -y %(POINT_GROUP)s \\
+    -p %(UNIT_CELL)s \\
+    --highres=%(HIGH_RES)s \\
+    --shell-file=%(PREFIX)s_completeness.dat
+"""
+
+COMPARE_HKL_WRAP = """\
+#!/bin/bash
+
+module load spack
+spack load crystfel
+
+compare_hkl \\
+    %(PREFIX)s_merged.hkl1 \\
+    %(PREFIX)s_merged.hkl2 \\
+    -y %(POINT_GROUP)s \\
+    -p %(UNIT_CELL)s \\
+    --highres=%(HIGH_RES)s \\
+    --fom=%(FOM)s \\
+    --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
+
 """
