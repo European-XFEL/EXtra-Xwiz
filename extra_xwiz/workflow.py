@@ -208,6 +208,7 @@ class Workflow:
                 'MAX_ADU': self.max_adu
             })
         subprocess.check_output(['sh', '_tmp_partialator.sh'])
+
         # create simple resolution-bin table
         with open('_tmp_table_gen.sh', 'w') as f:
             f.write(CHECK_HKL_WRAP % {
@@ -217,6 +218,7 @@ class Workflow:
                 'HIGH_RES': self.res_higher
             })
         subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'])
+
         # create resolution-bin tables based on half-sets
         for i in range(3):
             with open(f'_tmp_table_gen{i}.sh', 'w') as f:
@@ -306,7 +308,7 @@ class Workflow:
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         self.process_directly(res_limit, cell_keyword)
 
-        print('\n-----   TASK: merge data and create statistics -----')
+        print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:
             _point_group = input(f'Point group symmetry [{self.point_group}] > ')
             if _point_group != '':
@@ -315,6 +317,19 @@ class Workflow:
                 else:
                     warnings.warn('Point group not recognized')
                     print('[default kept]')
+            _scale_model = input(f'Scaling model to use [{self.scale_model}] > ')
+            if _scale_model != '':
+                if _scale_model in ['unity', 'scsphere']:
+                    self.scale_model = _scale_model
+                else:
+                    warnings.warn('Model type not recognized')
+                    print('[default kept]')
+            _scale_iter = input(f'Number of iterations [{self.scale_iter}] > ')
+            if _scale_iter != '':
+                try:
+                    self.scale_iter = int(_scale_iter)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default.')
 
         self.merge_bragg_obs()
 
