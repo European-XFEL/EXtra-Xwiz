@@ -39,8 +39,8 @@ max_adu = 100000
 """
 
 PROC_BASH_SLURM = """\
-#!/bin/bash
-
+#!/bin/sh
+source /usr/share/Modules/init/sh
 module load spack
 spack load crystfel
 module load ccp4/7.0
@@ -60,8 +60,7 @@ indexamajig \\
 """
 
 PROC_BASH_DIRECT = """\
-#!/bin/bash
-
+source /usr/share/Modules/init/sh
 module load spack
 spack load crystfel
 module load ccp4/7.0
@@ -81,8 +80,7 @@ indexamajig \\
 """
 
 PARTIALATOR_WRAP = """\
-#!/bin/bash
-
+source /usr/share/Modules/init/sh
 module load spack
 spack load crystfel
 
@@ -96,8 +94,7 @@ partialator \\
 """
 
 CHECK_HKL_WRAP = """\
-#!/bin/bash
-
+source /usr/share/Modules/init/sh
 module load spack
 spack load crystfel
 
@@ -110,8 +107,7 @@ check_hkl \\
 """
 
 COMPARE_HKL_WRAP = """\
-#!/bin/bash
-
+source /usr/share/Modules/init/sh
 module load spack
 spack load crystfel
 
@@ -123,5 +119,4 @@ compare_hkl \\
     --highres=%(HIGH_RES)s \\
     --fom=%(FOM)s \\
     --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
-
 """

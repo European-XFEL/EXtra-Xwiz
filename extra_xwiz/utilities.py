@@ -89,8 +89,8 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     """
     print(' Waiting for job-array', job_id)
     out_logs = []
-    # wait until all tasks have passed queueing stage and N(logs) == N(tasks)
-    while len(out_logs) < n_nodes:
+    # wait until at least one allocated job has passed queueing stage
+    while len(out_logs) == 0:
         time.sleep(3)
         out_logs = glob(f'slurm-{job_id}_*.out')
     max_time = '0:00'
@@ -99,12 +99,16 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
-        # after the filter by job_id check, the following would be inappropriate
+        # after the filter by job_id check, the following would be inappropriate:
         # n_tasks = len(tasks) - 2   # header-line + trailing '\n' always present
+        # times = [ln.split()[5] for ln in tasks[1:-1]]
         n_tasks = len(tasks)
-        times = [ln.split()[5] for ln in tasks[1:-1]]
-        if n_tasks > 0:
+        times = [ln.split()[5] for ln in tasks]
+        try:
             max_time = max(times)
+        except ValueError:
+            # if for some reason the list 'times' is empty
+            max_time = '0:00'
         calc_progress(out_logs, n_total)
         time.sleep(1)
     print()
