@@ -134,3 +134,11 @@ compare_hkl \\
     --fom=%(FOM)s \\
     --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
 """
+
+CELL_EXPLORER_WRAP = """\
+source /usr/share/Modules/init/sh
+module load spack
+spack load crystfel
+
+cell_explorer %(PREFIX)s.stream
+"""

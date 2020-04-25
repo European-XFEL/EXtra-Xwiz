@@ -9,7 +9,8 @@ import warnings
 
 from . import config
 from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
-                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, POINT_GROUPS)
+                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
+                        POINT_GROUPS)
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
                         replace_cell)
 
@@ -184,6 +185,20 @@ class Workflow:
             for hit_event in self.hit_list:
                 f.write(f'{self.vds_name} {hit_event}\n')
 
+    def cell_explorer(self):
+
+        with open('_cell_explorer.sh', 'w') as f:
+            f.write(CELL_EXPLORER_WRAP % {'PREFIX': self.list_prefix})
+        subprocess.check_output(['sh', '_cell_explorer.sh'])
+        _explorer_cell = ''
+        while not os.path.exists(_explorer_cell):
+            _explorer_cell = \
+                input(' Name of the cell file created with cell explorer > ')
+        self.cell_file = _explorer_cell
+        self.hit_list, _ = \
+            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+        self.write_hit_list()
+
     def fit_filtered_crystals(self):
 
         self.hit_list, self.cell_ensemble = \
@@ -299,10 +314,11 @@ class Workflow:
 
         print('\n-----   TASK: check crystal frames and fit unit cell -----')
         if self.cell_file != 'none':
-            self.fit_filtered_crystals()  # this will change the cell file eventually
+            # first filter indexed frames, then update cell based on crystals found
+            self.fit_filtered_crystals()
         else:
-            # invoke cell explorer
-            pass
+            # first fit cell remotely, then filter frames with matching crystals
+            self.cell_explorer()
 
         print('\n-----   TASK: run CrystFEL (II) with refined cell ------')
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
