@@ -137,6 +137,7 @@ compare_hkl \\
 
 CELL_EXPLORER_WRAP = """\
 source /usr/share/Modules/init/sh
+module load exfel
 module load spack
 spack load crystfel
 
