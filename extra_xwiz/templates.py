@@ -41,6 +41,8 @@ max_adu = 100000
 PROC_BASH_SLURM = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
+
+module load exfel 
 module load spack
 spack load crystfel
 module load ccp4/7.0
@@ -60,7 +62,10 @@ indexamajig \\
 """
 
 PROC_BASH_DIRECT = """\
+#!/bin/sh
 source /usr/share/Modules/init/sh
+
+module load exfel 
 module load spack
 spack load crystfel
 module load ccp4/7.0
@@ -68,7 +73,8 @@ module load ccp4/7.0
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
   -o %(PREFIX)s_hits.stream \\
-  -g %(GEOM)s %(CRYSTAL)s \\
+  -g %(GEOM)s \\
+  %(CRYSTAL)s \\
   -j %(CORES)s \\
   --highres=%(RESOLUTION)s \\
   --peaks=%(PEAK_METHOD)s \\
@@ -80,7 +86,10 @@ indexamajig \\
 """
 
 PARTIALATOR_WRAP = """\
+#!/bin/sh
 source /usr/share/Modules/init/sh
+
+module load exfel
 module load spack
 spack load crystfel
 
@@ -94,7 +103,10 @@ partialator \\
 """
 
 CHECK_HKL_WRAP = """\
+#!/bin/sh
 source /usr/share/Modules/init/sh
+
+module load exfel
 module load spack
 spack load crystfel
 
@@ -107,7 +119,9 @@ check_hkl \\
 """
 
 COMPARE_HKL_WRAP = """\
+#!/bin/sh
 source /usr/share/Modules/init/sh
+module load exfel
 module load spack
 spack load crystfel
 

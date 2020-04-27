@@ -5,7 +5,7 @@ from glob import glob
 import numpy as np
 from scipy.optimize import curve_fit
 import subprocess
-import time
+import time, re
 
 
 def estimate_moments(sample):
@@ -72,13 +72,13 @@ def calc_progress(out_logs, n_total):
     """
     n_current = []
     for log in out_logs:
-        with open(log, "r") as f:
-            ll = f.readlines()
-        if 'indexable' in ll[-1]:
-            # print(log, ll[-1].split()[4])
-            n_current.append(int(ll[-1].split()[4]))
-        elif 'Final:' in ll[-1]:
-            n_current.append(int(ll[-1].split()[1]))
+        re_pattern = '(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
+        all_crystals = re.findall(re_pattern, open(log).read(), re.DOTALL)
+        if len(all_crystals)==0:
+            current_crystal = 0
+        else:
+            current_crystal = int(all_crystals[-1][1])
+        n_current.append(current_crystal)
     if len(n_current) > 0:
         n_current_total = sum(n_current)
         print_progress_bar(n_current_total, n_total, length=50)
@@ -93,6 +93,8 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     while len(out_logs) == 0:
         time.sleep(3)
         out_logs = glob(f'slurm-{job_id}_*.out')
+        # This may never happen if array of jobs is submitted. 
+        # ARRAY_ID = 0 may be finished before the last ID starts
     max_time = '0:00'
     n_tasks = n_nodes
     # wait until all tasks have finished, hence vanished from the squeue list

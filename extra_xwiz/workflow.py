@@ -125,7 +125,7 @@ class Workflow:
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
                       f'--time={self.duration}',
-                      f'--array=0-{self.n_nodes}',
+                      f'--array=0-{self.n_nodes-1}',
                       f'./{self.list_prefix}_proc-0.sh']
         # print(' '.join(slurm_args))
         proc_out = subprocess.check_output(slurm_args)
@@ -247,7 +247,7 @@ class Workflow:
             if _vds_name != '':
                 self.vds_name = _vds_name
         if not os.path.exists(f'{self.work_dir}/{self.vds_name}'):
-            os.system(f'extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
+            os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
         else:
             print('Requested VDS is present already.')
 
