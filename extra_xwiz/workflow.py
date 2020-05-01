@@ -16,11 +16,11 @@ from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, interactive=False):
+    def __init__(self, home_dir, work_dir, automatic=False):
 
         self.home_dir = home_dir
         self.work_dir = work_dir
-        self.interactive = interactive
+        self.interactive = not automatic
         self.exp_ids = np.array([])
         conf = config.load_from_file()
         self.data_path = conf['data']['path']
@@ -51,7 +51,7 @@ class Workflow:
         cell_keyword = ''
 
         if self.interactive:
-            _resolution = input(f'Processing resolution limit [{high_res}] > ')
+            _resolution = input(f'Processing resolution limit in Å [{high_res}] > ')
             if _resolution != '':
                 try:
                     high_res = float(_resolution)
@@ -335,10 +335,10 @@ class Workflow:
 
 
 def main(argv=None):
-    ap = ArgumentParser(prog="extra-xwiz")
+    ap = ArgumentParser(prog="xwiz-workflow")
     ap.add_argument(
-        "-i", "--interactive", help="screen through configuration"
-        " interactively",
+        "-a", "--automatic", help="enable auto-pipeline workflow"
+        " (skip configuration review)",
         action='store_true'
     )
     args = ap.parse_args(argv)
@@ -350,7 +350,7 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir, interactive=args.interactive)
+    workflow = Workflow(home_dir, work_dir, automatic=args.automatic)
     workflow.manage()
 
 
