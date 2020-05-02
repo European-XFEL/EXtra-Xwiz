@@ -113,9 +113,6 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
-        # after the filter by job_id check, the following would be inappropriate:
-        # n_tasks = len(tasks) - 2   # header-line + trailing '\n' always present
-        # times = [ln.split()[5] for ln in tasks[1:-1]]
         n_tasks = len(tasks)
         times = [ln.split()[5] for ln in tasks]
         try:
@@ -125,6 +122,8 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
             max_time = '0:00'
         calc_progress(out_logs, n_total)
         time.sleep(2)
+    # to ensure a full bar after all tasks have finished.
+    calc_progress(out_logs, n_total)
     print()
 
 

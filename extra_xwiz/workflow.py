@@ -345,8 +345,10 @@ def main(argv=None):
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
     if not os.path.exists(f'{work_dir}/.xwiz_conf.toml'):
-        print('configuration file is not present, will be created.')
+        print('Configuration file is not present, will be created.')
         config.create_file()
+        print('Please rerun now.')
+        exit()
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
