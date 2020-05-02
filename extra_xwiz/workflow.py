@@ -149,13 +149,10 @@ class Workflow:
 
     def distribute(self):
 
-        with h5py.File(self.vds_name, 'r') as f:
-            self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
-        n_total = self.exp_ids.shape[0]
-        if self.n_frames > n_total:
+        if self.n_frames > self.exp_ids.shape[0]:
             warnings.warn('Requested number of frames too large, reset to'
-                          'total frame number.')
-            self.n_frames = n_total
+                          f'total frame number of {self.exp_ids.shape[0]}.')
+            self.n_frames = self.exp_ids.shape[0]
         sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes)
         for chunk, indices in enumerate(sub_indices):
             print(len(indices), end=' ')
@@ -250,10 +247,13 @@ class Workflow:
             os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
         else:
             print('Requested VDS is present already.')
+        with h5py.File(self.vds_name, 'r') as f:
+            self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
+        print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
 
         print('\n-----   TASK: prepare distributed computing   -----')
         if self.interactive:
-            _n_frames = input(f'Number of frames [{self.n_frames}] > ')
+            _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
             if _n_frames != '':
                 try:
                     self.n_frames = int(_n_frames)
