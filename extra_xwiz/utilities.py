@@ -57,31 +57,43 @@ def seconds(tm_str):
     return secs
 
 
-def print_progress_bar(i, n, length=80, fill='█'):
-    """ Visualize a percent fraction by a bar, update in-line using CR char.
+def print_progress_bar(i, n, n_crystals, length=80, fill='█'):
+    """ Visualize a percent fraction by a bar, update in-line using <CR> char.
     """
     percent = '{0:.1f}'.format(100 * (i / float(n)))
     filled_len = int(length * i // n)
     bar = fill * filled_len + '-' * (length - filled_len)
-    print('\r Progress: |%s| %s%% complete. ' % (bar, percent), end='\r')
+    print('\r Progress: |%s| %s%%. ◆ %d' % (bar, percent, n_crystals),
+          end='\r')
 
 
 def calc_progress(out_logs, n_total):
     """ Compare total number of processed frames (from logs) at a given time
         to the overall total number of frames to process.
+        In addition collect number of found crystals for display.
     """
-    n_current = []
+    n_frames = []
+    n_crystals = []
     for log in out_logs:
-        re_pattern = '(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
-        all_crystals = re.findall(re_pattern, open(log).read(), re.DOTALL)
-        if len(all_crystals)==0:
-            current_crystal = 0
+        # extract numbers of frames processed
+        frames_pattern = '(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
+        frame_info = re.findall(frames_pattern, open(log).read(), re.DOTALL)
+        if len(frame_info) == 0:
+            current_frames = 0
         else:
-            current_crystal = int(all_crystals[-1][1])
-        n_current.append(current_crystal)
-    if len(n_current) > 0:
-        n_current_total = sum(n_current)
-        print_progress_bar(n_current_total, n_total, length=50)
+            current_frames = int(frame_info[-1][1])
+        n_frames.append(current_frames)
+        # extract numbers of crystals found
+        crystal_pattern = '(\),\s*)(\d*)( crystals)'
+        crystal_info = re.findall(crystal_pattern, open(log).read(), re.DOTALL)
+        if len(crystal_info) == 0:
+            current_crystals = 0
+        else:
+            current_crystals = int(crystal_info[-1][1])
+        n_crystals.append(current_crystals)
+    # update progress bar unless stdout-logs are not yet available
+    if len(n_frames) > 0 and len(n_crystals) > 0:
+        print_progress_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
 
 
 def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
@@ -91,7 +103,7 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
     out_logs = []
     # wait until at least one allocated job has passed queueing stage
     while len(out_logs) == 0:
-        time.sleep(3)
+        time.sleep(5)
         out_logs = glob(f'slurm-{job_id}_*.out')
         # This may never happen if array of jobs is submitted. 
         # ARRAY_ID = 0 may be finished before the last ID starts
@@ -112,7 +124,7 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
             # if for some reason the list 'times' is empty
             max_time = '0:00'
         calc_progress(out_logs, n_total)
-        time.sleep(1)
+        time.sleep(2)
     print()
 
 
