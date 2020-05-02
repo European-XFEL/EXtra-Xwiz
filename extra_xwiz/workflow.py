@@ -40,6 +40,7 @@ class Workflow:
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
+        self.integration_radii = conf['proc_fine']['integration_radii']
         self.point_group = conf['merging']['point_group']
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
@@ -134,6 +135,16 @@ class Workflow:
 
     def process_directly(self, high_res, cell_keyword):
 
+        if self.interactive:
+            _int_radii = input('Integration radii around predicted Bragg-peak'
+                               f'positions [{self.integration_radii}] > ')
+            if _int_radii != '':
+                try:
+                    _ = [int(x) for x in _int_radii.split(',')]
+                    self.integration_radii = _int_radii
+                except ValueError:
+                    warnings.warn('Wrong format or types for integration-radii parameter')
+
         with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
             f.write(PROC_BASH_DIRECT % {'PREFIX': self.list_prefix,
                                         'GEOM': self.geometry,
@@ -144,7 +155,8 @@ class Workflow:
                                         'PEAK_THRESHOLD': self.peak_threshold,
                                         'PEAK_MIN_PX': self.peak_min_px,
                                         'PEAK_SNR': self.peak_snr,
-                                        'INDEX_METHOD': self.index_method
+                                        'INDEX_METHOD': self.index_method,
+                                        'INT_RADII': self.integration_radii
                                         })
         subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
 
