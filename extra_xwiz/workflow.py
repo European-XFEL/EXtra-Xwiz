@@ -198,7 +198,9 @@ class Workflow:
                 f.write(f'{self.vds_name} {hit_event}\n')
 
     def cell_explorer(self):
-
+        """Identify initial unit cell from a relatively small number of frames
+           indexed w/o prior cell
+        """
         with open('_cell_explorer.sh', 'w') as f:
             f.write(CELL_EXPLORER_WRAP % {'PREFIX': self.list_prefix})
         subprocess.check_output(['sh', '_cell_explorer.sh'])
@@ -207,12 +209,17 @@ class Workflow:
             _explorer_cell = \
                 input(' Name of the cell file created with cell explorer > ')
         self.cell_file = _explorer_cell
+        """
+        # the following is likely premature, respectively redundant if we have
+          another SLURM-distributed run vs. all frames:
         self.hit_list, _ = \
             get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         self.write_hit_list()
+        """
 
     def fit_filtered_crystals(self):
-
+        """Select diffraction frames from match vs. good cell
+        """
         self.hit_list, self.cell_ensemble = \
             get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         self.write_hit_list()
@@ -324,15 +331,22 @@ class Workflow:
         self.concat()
         self.clean_up(job_id)
 
-        print('\n-----   TASK: check crystal frames and fit unit cell -----')
-        if self.cell_file != 'none':
-            # first filter indexed frames, then update cell based on crystals found
-            self.fit_filtered_crystals()
-        else:
-            # first fit cell remotely, then filter frames with matching crystals
+        if self.cell_file == 'none':
+            print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
+            # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
+            self.distribute()
+            res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_lower)
+            job_id = self.process_with_slurm(res_limit, cell_keyword)
+            wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
+            self.concat()
+            self.clean_up(job_id)
 
-        print('\n-----   TASK: run CrystFEL (II) with refined cell ------')
+        print('\n-----   TASK: check crystal frames and refine unit cell -----')
+        # first filter indexed frames, then update cell based on crystals found
+        self.fit_filtered_crystals()
+
+        print('\n-----   TASK: run final CrystFEL with refined cell ------')
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         self.process_directly(res_limit, cell_keyword)
 
