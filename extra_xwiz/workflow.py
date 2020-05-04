@@ -104,7 +104,7 @@ class Workflow:
         # check cell file presence; expected 'true' for default or overwrite != 'none'
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
-            print(' [check o.k.]')
+            print(' [cell-file check o.k.]')
         elif self.cell_file != 'none':
             warnings.warn('Processing without prior unit cell (invalid cell file).')
 
@@ -222,6 +222,7 @@ class Workflow:
         """
         self.hit_list, self.cell_ensemble = \
             get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+        print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
         self.write_hit_list()
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
