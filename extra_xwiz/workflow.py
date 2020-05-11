@@ -13,6 +13,7 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         POINT_GROUPS)
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
                         replace_cell)
+from .summary import create_new_summary, report_cell_check, report_step_rate
 
 
 class Workflow:
@@ -47,6 +48,7 @@ class Workflow:
         self.max_adu = conf['merging']['max_adu']
         self.hit_list = []
         self.cell_ensemble = []
+        self.step = 0
 
     def crystfel_from_config(self, high_res=2.0):
 
@@ -160,6 +162,17 @@ class Workflow:
                                         })
         subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
 
+    def wrap_process(self):
+        self.step += 1
+        res_limit, cell_keyword = \
+            self.crystfel_from_config(high_res=self.res_lower)
+        job_id = self.process_with_slurm(res_limit, cell_keyword)
+        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
+        self.concat()
+        report_step_rate(self.list_prefix, f'{self.list_prefix}.stream',
+                         self.step)
+        self.clean_up(job_id)
+
     def distribute(self):
 
         if self.n_frames > self.exp_ids.shape[0]:
@@ -223,6 +236,7 @@ class Workflow:
         self.hit_list, self.cell_ensemble = \
             get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
+        report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
         self.write_hit_list()
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
@@ -305,6 +319,8 @@ class Workflow:
                 self.list_prefix = _list_prefix
         self.distribute()
 
+        create_new_summary(self.list_prefix)
+
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
             _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
@@ -326,30 +342,25 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
-        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_lower)
-        job_id = self.process_with_slurm(res_limit, cell_keyword)
-        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
-        self.concat()
-        self.clean_up(job_id)
+        self.wrap_process()
 
         if self.cell_file == 'none':
             print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
             self.distribute()
-            res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_lower)
-            job_id = self.process_with_slurm(res_limit, cell_keyword)
-            wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
-            self.concat()
-            self.clean_up(job_id)
+            self.wrap_process()
 
         print('\n-----   TASK: check crystal frames and refine unit cell -----')
         # first filter indexed frames, then update cell based on crystals found
         self.fit_filtered_crystals()
 
         print('\n-----   TASK: run final CrystFEL with refined cell ------')
+        self.step += 1
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         self.process_directly(res_limit, cell_keyword)
+        report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
+                         self.step)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:
