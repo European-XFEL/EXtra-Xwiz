@@ -170,7 +170,7 @@ class Workflow:
         wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
         self.concat()
         report_step_rate(self.list_prefix, f'{self.list_prefix}.stream',
-                         self.step)
+                         self.step, res_limit)
         self.clean_up(job_id)
 
     def distribute(self):
@@ -360,7 +360,7 @@ class Workflow:
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         self.process_directly(res_limit, cell_keyword)
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
-                         self.step)
+                         self.step, res_limit)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:

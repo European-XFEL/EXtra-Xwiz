@@ -8,7 +8,7 @@ def create_new_summary(prefix):
         f.write('Step #     source    N(crystals)    N(frames)    Indexing rate [%%]\n')
 
 
-def report_step_rate(prefix, stream_file, step):
+def report_step_rate(prefix, stream_file, step, res_limit):
     """Parse assembled indexamajig stream file for frames and crystals.
        Calculate indexing rate and report to summary file.
     """
@@ -19,8 +19,8 @@ def report_step_rate(prefix, stream_file, step):
                              re.DOTALL)
     indexing_rate = 100.0 * len(cryst_occur) / len(frame_occur)
     with open(f'{prefix}.summary', 'a') as f:
-        f.write(' {:2d}     indexamajig   {:7d}   {:7d}   {:5.2f}\n'.format(step,
-                len(cryst_occur), len(frame_occur), indexing_rate))
+        f.write(' {:2d}  {:3.1f}   indexamajig   {:7d}   {:7d}       {:5.2f}\n'.format(step,
+                res_limit, len(cryst_occur), len(frame_occur), indexing_rate))
 
 
 def report_cell_check(prefix, n_crystals, n_frames):
@@ -29,7 +29,7 @@ def report_cell_check(prefix, n_crystals, n_frames):
     """
     indexing_rate = 100.0 * n_crystals / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('        cell_check    {:7d}   {:7d}       {:5.2f}\n'.format(n_crystals,
+        f.write('           cell_check    {:7d}   {:7d}       {:5.2f}\n'.format(n_crystals,
                 n_frames, indexing_rate))
 
 
