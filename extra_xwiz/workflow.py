@@ -408,5 +408,4 @@ def main(argv=None):
     print(48 * '~')
     workflow = Workflow(home_dir, work_dir, automatic=args.automatic)
     workflow.manage()
-
-
+    print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')

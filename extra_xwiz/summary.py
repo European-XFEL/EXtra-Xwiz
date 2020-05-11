@@ -5,7 +5,7 @@ import re
 def create_new_summary(prefix):
     with open(f'{prefix}.summary', 'w') as f:
         f.write('SUMMARY OF XWIZ WORKFLOW\n\n')
-        f.write('Step #     source    N(crystals)    N(frames)    Indexing rate [%%]\n')
+        f.write('Step #   d_lim   source      N(crystals)    N(frames)    Indexing rate [%%]\n')
 
 
 def report_step_rate(prefix, stream_file, step, res_limit):
@@ -19,7 +19,7 @@ def report_step_rate(prefix, stream_file, step, res_limit):
                              re.DOTALL)
     indexing_rate = 100.0 * len(cryst_occur) / len(frame_occur)
     with open(f'{prefix}.summary', 'a') as f:
-        f.write(' {:2d}  {:3.1f}   indexamajig   {:7d}   {:7d}       {:5.2f}\n'.format(step,
+        f.write(' {:2d}        {:3.1f}   indexamajig   {:7d}   {:7d}         {:5.2f}\n'.format(step,
                 res_limit, len(cryst_occur), len(frame_occur), indexing_rate))
 
 
@@ -29,7 +29,7 @@ def report_cell_check(prefix, n_crystals, n_frames):
     """
     indexing_rate = 100.0 * n_crystals / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('           cell_check    {:7d}   {:7d}       {:5.2f}\n'.format(n_crystals,
+        f.write('                 cell_check    {:7d}   {:7d}         {:5.2f}\n'.format(n_crystals,
                 n_frames, indexing_rate))
 
 
