@@ -9,9 +9,12 @@ import warnings
 
 from . import config
 from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
-                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, POINT_GROUPS)
+                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
+                        POINT_GROUPS)
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
-                        replace_cell)
+                        replace_cell, cell_as_string)
+from .summary import (create_new_summary, report_cell_check, report_step_rate,
+                      report_total_rate, report_cells)
 
 
 class Workflow:
@@ -39,12 +42,15 @@ class Workflow:
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
+        self.integration_radii = conf['proc_fine']['integration_radii']
         self.point_group = conf['merging']['point_group']
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
         self.max_adu = conf['merging']['max_adu']
         self.hit_list = []
         self.cell_ensemble = []
+        self.cell_info = []
+        self.step = 0
 
     def crystfel_from_config(self, high_res=2.0):
 
@@ -96,15 +102,16 @@ class Workflow:
             _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR ["none"] > ')
             if _cell_file != '':
                 if _cell_file == 'none':
-                    print('Processing without prior unit cell (unknown crystal geometry).')
+                    print('Processing without prior unit cell - unknown crystal geometry.')
                 self.cell_file = _cell_file
 
         # check cell file presence; expected 'true' for default or overwrite != 'none'
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
-            print(' [check o.k.]')
+            self.cell_info.append(cell_as_string(self.cell_file))
+            print(' [cell-file check o.k.]')
         elif self.cell_file != 'none':
-            warnings.warn('Processing without prior unit cell (invalid cell file).')
+            warnings.warn('Processing without unit cell due to invalid cell file.')
 
         return high_res, cell_keyword
 
@@ -133,6 +140,16 @@ class Workflow:
 
     def process_directly(self, high_res, cell_keyword):
 
+        if self.interactive:
+            _int_radii = input('Integration radii around predicted Bragg-peak'
+                               f'positions [{self.integration_radii}] > ')
+            if _int_radii != '':
+                try:
+                    _ = [int(x) for x in _int_radii.split(',')]
+                    self.integration_radii = _int_radii
+                except ValueError:
+                    warnings.warn('Wrong format or types for integration-radii parameter')
+
         with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
             f.write(PROC_BASH_DIRECT % {'PREFIX': self.list_prefix,
                                         'GEOM': self.geometry,
@@ -143,9 +160,21 @@ class Workflow:
                                         'PEAK_THRESHOLD': self.peak_threshold,
                                         'PEAK_MIN_PX': self.peak_min_px,
                                         'PEAK_SNR': self.peak_snr,
-                                        'INDEX_METHOD': self.index_method
+                                        'INDEX_METHOD': self.index_method,
+                                        'INT_RADII': self.integration_radii
                                         })
         subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
+
+    def wrap_process(self):
+        self.step += 1
+        res_limit, cell_keyword = \
+            self.crystfel_from_config(high_res=self.res_lower)
+        job_id = self.process_with_slurm(res_limit, cell_keyword)
+        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
+        self.concat()
+        report_step_rate(self.list_prefix, f'{self.list_prefix}.stream',
+                         self.step, res_limit)
+        self.clean_up(job_id)
 
     def distribute(self):
 
@@ -184,10 +213,33 @@ class Workflow:
             for hit_event in self.hit_list:
                 f.write(f'{self.vds_name} {hit_event}\n')
 
-    def fit_filtered_crystals(self):
+    def cell_explorer(self):
+        """Identify initial unit cell from a relatively small number of frames
+           indexed w/o prior cell
+        """
+        with open('_cell_explorer.sh', 'w') as f:
+            f.write(CELL_EXPLORER_WRAP % {'PREFIX': self.list_prefix})
+        subprocess.check_output(['sh', '_cell_explorer.sh'])
+        _explorer_cell = ''
+        while not os.path.exists(_explorer_cell):
+            _explorer_cell = \
+                input(' Name of the cell file created with cell explorer > ')
+        self.cell_file = _explorer_cell
+        """
+        # the following is likely premature, respectively redundant if we have
+          another SLURM-distributed run vs. all frames:
+        self.hit_list, _ = \
+            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+        self.write_hit_list()
+        """
 
+    def fit_filtered_crystals(self):
+        """Select diffraction frames from match vs. good cell
+        """
         self.hit_list, self.cell_ensemble = \
             get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+        print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
+        report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
         self.write_hit_list()
         refined_cell = fit_unit_cell(self.cell_ensemble)
         replace_cell(self.cell_file, refined_cell)
@@ -291,22 +343,28 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
-        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_lower)
-        job_id = self.process_with_slurm(res_limit, cell_keyword)
-        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
-        self.concat()
-        self.clean_up(job_id)
+        create_new_summary(self.list_prefix, self.geometry)
+        self.wrap_process()
 
-        print('\n-----   TASK: check crystal frames and fit unit cell -----')
-        if self.cell_file != 'none':
-            self.fit_filtered_crystals()  # this will change the cell file eventually
-        else:
-            # invoke cell explorer
-            pass
+        if self.cell_file == 'none':
+            print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
+            # fit cell remotely, do not yet filter, but re-run with that
+            self.cell_explorer()
+            self.distribute()
+            self.wrap_process()
 
-        print('\n-----   TASK: run CrystFEL (II) with refined cell ------')
+        print('\n-----   TASK: check crystal frames and refine unit cell -----')
+        # first filter indexed frames, then update cell based on crystals found
+        self.fit_filtered_crystals()
+
+        print('\n-----   TASK: run final CrystFEL with refined cell ------')
+        self.step += 1
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         self.process_directly(res_limit, cell_keyword)
+        report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
+                         self.step, res_limit)
+        report_total_rate(self.list_prefix, self.n_frames)
+        report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:
@@ -354,5 +412,5 @@ def main(argv=None):
     print(48 * '~')
     workflow = Workflow(home_dir, work_dir, automatic=args.automatic)
     workflow.manage()
-
-
+    print(48 * '~')
+    print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')

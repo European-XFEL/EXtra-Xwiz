@@ -30,6 +30,7 @@ n_cores = 40
 
 [proc_fine]
 resolution = 2.0
+integration_radii = "2,3,5"
 
 [merging]
 point_group = "422"
@@ -82,7 +83,8 @@ indexamajig \\
   --threshold=%(PEAK_THRESHOLD)s \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
-  --no-non-hits-in-stream  
+  --no-non-hits-in-stream \\
+  --int-radius=%(INT_RADII)s
 """
 
 PARTIALATOR_WRAP = """\
@@ -133,4 +135,13 @@ compare_hkl \\
     --highres=%(HIGH_RES)s \\
     --fom=%(FOM)s \\
     --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
+"""
+
+CELL_EXPLORER_WRAP = """\
+source /usr/share/Modules/init/sh
+module load exfel
+module load spack
+spack load crystfel
+
+cell_explorer %(PREFIX)s.stream
 """

@@ -40,8 +40,12 @@ def fit_gauss_curve(sample):
     y, bins = np.histogram(sample, bins=10)  # y: frequency (not density)
     x = (bins[:-1] + bins[1:]) / 2  # take bin centres as x
     print_hist_bars(x, y, length=50)
-    p, var_matrix = curve_fit(gauss_func, x, y, p0=p0)
-    print(p)
+    try:
+        p, var_matrix = curve_fit(gauss_func, x, y, p0=p0)
+        print(p)
+    # run-time error may occur upon badly behaved distribution
+    except RuntimeError:
+        p = list(p0)
     return p[1]
 
 
@@ -207,3 +211,12 @@ def replace_cell(fn, const_values):
                 f_out.write(new_ln + '\n')
             else:
                 f_out.write(ln)
+
+
+def cell_as_string(cell_file):
+    """Extract unit cell parameters of currently used file to one-line string
+    """
+    cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+    cell_string = '{:20}'.format(cell_file) + \
+                  '  '.join([item[1] for item in cell_info]) + '\n'
+    return cell_string
