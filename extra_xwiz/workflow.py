@@ -365,7 +365,7 @@ class Workflow:
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
-        report_cells(self.cell_info)
+        report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:

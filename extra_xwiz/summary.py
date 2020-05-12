@@ -51,5 +51,6 @@ def report_cells(prefix, cell_strings):
     """
     with open(f'{prefix}.summary', 'a') as f:
         f.write('Crystal unit cells used:\n\n')
+        f.write('file                symmetry/axis, a, b, c, alpha, beta, gamma\n')
         for string in cell_strings:
             f.write(string)
