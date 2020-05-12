@@ -12,8 +12,9 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
                         POINT_GROUPS)
 from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
-                        replace_cell)
-from .summary import create_new_summary, report_cell_check, report_step_rate
+                        replace_cell, cell_as_string)
+from .summary import (create_new_summary, report_cell_check, report_step_rate,
+                      report_total_rate, report_cells)
 
 
 class Workflow:
@@ -48,6 +49,7 @@ class Workflow:
         self.max_adu = conf['merging']['max_adu']
         self.hit_list = []
         self.cell_ensemble = []
+        self.cell_info = []
         self.step = 0
 
     def crystfel_from_config(self, high_res=2.0):
@@ -100,15 +102,16 @@ class Workflow:
             _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR ["none"] > ')
             if _cell_file != '':
                 if _cell_file == 'none':
-                    print('Processing without prior unit cell (unknown crystal geometry).')
+                    print('Processing without prior unit cell - unknown crystal geometry.')
                 self.cell_file = _cell_file
 
         # check cell file presence; expected 'true' for default or overwrite != 'none'
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
+            self.cell_info.append(cell_as_string(self.cell_file))
             print(' [cell-file check o.k.]')
         elif self.cell_file != 'none':
-            warnings.warn('Processing without prior unit cell (invalid cell file).')
+            warnings.warn('Processing without unit cell due to invalid cell file.')
 
         return high_res, cell_keyword
 
@@ -361,6 +364,8 @@ class Workflow:
         self.process_directly(res_limit, cell_keyword)
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
+        report_total_rate(self.list_prefix, self.n_frames)
+        report_cells(self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
         if self.interactive:
@@ -408,4 +413,5 @@ def main(argv=None):
     print(48 * '~')
     workflow = Workflow(home_dir, work_dir, automatic=args.automatic)
     workflow.manage()
+    print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')

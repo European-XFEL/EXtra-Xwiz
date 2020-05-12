@@ -19,7 +19,7 @@ def report_step_rate(prefix, stream_file, step, res_limit):
                              re.DOTALL)
     indexing_rate = 100.0 * len(cryst_occur) / len(frame_occur)
     with open(f'{prefix}.summary', 'a') as f:
-        f.write(' {:2d}        {:3.1f}   indexamajig   {:7d}   {:7d}         {:5.2f}\n'.format(step,
+        f.write(' {:2d}        {:3.1f}   indexamajig   {:7d}     {:7d}         {:5.2f}\n'.format(step,
                 res_limit, len(cryst_occur), len(frame_occur), indexing_rate))
 
 
@@ -29,8 +29,27 @@ def report_cell_check(prefix, n_crystals, n_frames):
     """
     indexing_rate = 100.0 * n_crystals / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('                 cell_check    {:7d}   {:7d}         {:5.2f}\n'.format(n_crystals,
+        f.write('                 cell_check    {:7d}     {:7d}         {:5.2f}\n'.format(n_crystals,
                 n_frames, indexing_rate))
 
 
+def report_total_rate(prefix, n_total):
+    """Report overall hit rate as ratio between crystals in last stream file
+       and total number of frames, as per initial setting.
+    """
+    cryst_occur = re.findall('Cell parameters',
+                             open(f'{prefix}_hits.stream').read(), re.DOTALL)
+    indexing_rate = 100.0 * len(cryst_occur) / n_total
+    with open(f'{prefix}.summary', 'a') as f:
+        f.write('                 OVERALL       {:7d}     {:7d}         {:5.2f}\n'.format(len(cryst_occur),
+                n_total, indexing_rate))
 
+
+def report_cells(prefix, cell_strings):
+    """Report unit cell parameters from all files used during the workflow,
+       in sequential order.
+    """
+    with open(f'{prefix}.summary', 'a') as f:
+        f.write('Crystal unit cells used:\n\n')
+        for string in cell_strings:
+            f.write(string)

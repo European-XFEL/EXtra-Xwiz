@@ -211,3 +211,14 @@ def replace_cell(fn, const_values):
                 f_out.write(new_ln + '\n')
             else:
                 f_out.write(ln)
+
+
+def cell_as_string(cell_file):
+    """Extract unit cell parameters of currently used file to one-line string
+    """
+    cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+    cell_string = f'{cell_file}: ' + ' '.join([item[1] for item in cell_info]) + '\n'
+    return cell_string
+
+
+d
