@@ -322,8 +322,6 @@ class Workflow:
                 self.list_prefix = _list_prefix
         self.distribute()
 
-        create_new_summary(self.list_prefix)
-
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
             _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
@@ -345,6 +343,7 @@ class Workflow:
             if _duration != '':
                 self.duration = _duration
 
+        create_new_summary(self.list_prefix, self.geometry)
         self.wrap_process()
 
         if self.cell_file == 'none':

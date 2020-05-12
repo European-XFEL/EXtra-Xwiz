@@ -217,6 +217,6 @@ def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
     cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
-    cell_string = '{:18}: '.format(cell_file) + \
-                  ' '.join([item[1] for item in cell_info]) + '\n'
+    cell_string = '{:20}'.format(cell_file) + \
+                  '  '.join([item[1] for item in cell_info]) + '\n'
     return cell_string

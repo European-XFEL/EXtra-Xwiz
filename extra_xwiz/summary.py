@@ -2,9 +2,10 @@ import os
 import re
 
 
-def create_new_summary(prefix):
+def create_new_summary(prefix, geom):
     with open(f'{prefix}.summary', 'w') as f:
         f.write('SUMMARY OF XWIZ WORKFLOW\n\n')
+        f.write(f'Geometry file used: {geom}\n\n')
         f.write('Step #   d_lim   source      N(crystals)    N(frames)    Indexing rate [%%]\n')
 
 
@@ -50,7 +51,7 @@ def report_cells(prefix, cell_strings):
        in sequential order.
     """
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('Crystal unit cells used:\n\n')
-        f.write('file                symmetry/axis, a, b, c, alpha, beta, gamma\n')
+        f.write('\nCrystal unit cells used:\n\n')
+        f.write('File                Symmetry/axis, a, b, c, alpha, beta, gamma\n')
         for string in cell_strings:
             f.write(string)
