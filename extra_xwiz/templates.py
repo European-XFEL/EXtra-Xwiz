@@ -59,7 +59,9 @@ indexamajig \\
   --threshold=%(PEAK_THRESHOLD)s \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
-  --no-non-hits-in-stream  
+  --copy-hdf5-field=/entry_1/pulseId \\
+  --copy-hdf5-field=/entry_1/trainId \\
+  --no-non-hits-in-stream
 """
 
 PROC_BASH_DIRECT = """\
@@ -83,6 +85,8 @@ indexamajig \\
   --threshold=%(PEAK_THRESHOLD)s \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
+  --copy-hdf5-field=/entry_1/pulseId \\
+  --copy-hdf5-field=/entry_1/trainId \\
   --no-non-hits-in-stream \\
   --int-radius=%(INT_RADII)s
 """
