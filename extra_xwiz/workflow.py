@@ -115,7 +115,7 @@ class Workflow:
 
         return high_res, cell_keyword
 
-    def process_with_slurm(self, high_res, cell_keyword):
+    def process_slurm_multi(self, high_res, cell_keyword):
 
         with open(f'{self.list_prefix}_proc-0.sh', 'w') as f:
             f.write(PROC_BASH_SLURM % {'PREFIX': self.list_prefix,
@@ -134,11 +134,10 @@ class Workflow:
                       f'--time={self.duration}',
                       f'--array=0-{self.n_nodes-1}',
                       f'./{self.list_prefix}_proc-0.sh']
-        # print(' '.join(slurm_args))
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]    # job id
 
-    def process_directly(self, high_res, cell_keyword):
+    def process_slurm_single(self, high_res, cell_keyword):
 
         if self.interactive:
             _int_radii = input('Integration radii around predicted Bragg-peak'
@@ -163,13 +162,17 @@ class Workflow:
                                         'INDEX_METHOD': self.index_method,
                                         'INT_RADII': self.integration_radii
                                         })
-        subprocess.check_output(['sh', f'{self.list_prefix}_proc-1.sh'])
+        slurm_args = ['sbatch',
+                      f'--partition={self.partition}',
+                      f'--time={self.duration}',
+                      f'./{self.list_prefix}_proc-1.sh']
+        subprocess.check_output(slurm_args)
 
     def wrap_process(self):
         self.step += 1
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
-        job_id = self.process_with_slurm(res_limit, cell_keyword)
+        job_id = self.process_slurm_multi(res_limit, cell_keyword)
         wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
         self.concat()
         report_step_rate(self.list_prefix, f'{self.list_prefix}.stream',
@@ -360,7 +363,7 @@ class Workflow:
         print('\n-----   TASK: run final CrystFEL with refined cell ------')
         self.step += 1
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
-        self.process_directly(res_limit, cell_keyword)
+        self.process_slurm_single(res_limit, cell_keyword)
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
