@@ -14,7 +14,7 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
-                      report_total_rate, report_cells)
+                      report_total_rate, report_cells, report_merging_metrics)
 
 
 class Workflow:
@@ -284,6 +284,10 @@ class Workflow:
                     'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
                 })
             subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'])
+
+        for fn in glob('_tmp*'):
+            os.remove(fn)
+        report_merging_metrics(self.list_prefix)
 
     def manage(self):
 

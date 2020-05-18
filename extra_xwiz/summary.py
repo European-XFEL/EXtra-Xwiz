@@ -55,3 +55,25 @@ def report_cells(prefix, cell_strings):
         f.write('File                Symmetry/axis, a, b, c, alpha, beta, gamma\n')
         for string in cell_strings:
             f.write(string)
+
+
+def report_merging_metrics(prefix):
+    """Report overall (unbinned) crystallographic figures-of-merit
+    """
+    labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
+    fstring = ['{:8.2f}', '{:8.2f}', '{:8.4f}', '{:8.4f}', '{:8.2f}']
+    with open(f'{prefix}.summary', 'a') as f:
+        f.write('\nCrystallographic FOMs:\n')
+        for i, table in enumerate(['completeness', 'completeness', 'cchalf',
+                                   'ccstar', 'rsplit']):
+            cw = [1,1,2,2,2][i]
+            cf = [3,6,1,1,1][i]
+            with open(f'{prefix}_{table}.dat', 'r') as fd:
+                data_lines = fd.readlines()[1:]
+            w_sum = 0.0
+            f_sum = 0.0
+            for ln in data_lines:
+                item = ln.split()
+                w_sum += int(item[cw])
+                f_sum += (int(item[cw]) * float(item[cf]))
+            f.write('{:18}'.format(labels[i]) + fstring[i].format(f_sum/w_sum) + '\n')
