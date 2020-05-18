@@ -365,7 +365,7 @@ class Workflow:
         self.step += 1
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
         job_id = self.process_slurm_single(res_limit, cell_keyword)
-        wait_single(job_id, self.n_frames)
+        wait_single(job_id, len(self.hit_list))
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
