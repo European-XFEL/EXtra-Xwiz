@@ -11,8 +11,8 @@ from . import config
 from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
                         POINT_GROUPS)
-from .utilities import (wait_or_cancel, get_crystal_frames, fit_unit_cell,
-                        replace_cell, cell_as_string)
+from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
+                        fit_unit_cell, replace_cell, cell_as_string)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells)
 
@@ -166,7 +166,8 @@ class Workflow:
                       f'--partition={self.partition}',
                       f'--time={self.duration}',
                       f'./{self.list_prefix}_proc-1.sh']
-        subprocess.check_output(slurm_args)
+        proc_out = subprocess.check_output(slurm_args)
+        return proc_out.decode('utf-8').split()[-1]  # job id
 
     def wrap_process(self):
         self.step += 1
@@ -363,7 +364,8 @@ class Workflow:
         print('\n-----   TASK: run final CrystFEL with refined cell ------')
         self.step += 1
         res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
-        self.process_slurm_single(res_limit, cell_keyword)
+        job_id = self.process_slurm_single(res_limit, cell_keyword)
+        wait_single(job_id, self.n_frames)
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
