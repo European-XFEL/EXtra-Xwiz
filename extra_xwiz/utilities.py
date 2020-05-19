@@ -5,7 +5,7 @@ from glob import glob
 import numpy as np
 from scipy.optimize import curve_fit
 import subprocess
-import time, re
+import os, re, time
 
 
 def estimate_moments(sample):
@@ -124,6 +124,27 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
         except ValueError:
             # if for some reason the list 'times' is empty
             max_time = '0:00'
+        calc_progress(out_logs, n_total)
+        time.sleep(2)
+    # to ensure a full bar after all tasks have finished.
+    calc_progress(out_logs, n_total)
+    print()
+
+
+def wait_single(job_id, n_total):
+    """ Loop until queue is empty (single non-array SLURM job)
+    """
+    print(' Waiting for job', job_id)
+    out_logs = [f'slurm-{job_id}.out']
+    # wait until the one allocated job has passed queueing stage
+    while not os.path.exists(f'slurm-{job_id}.out'):
+        time.sleep(2)
+    n_tasks = 1
+    # wait until task has finished, hence vanished from the squeue list
+    while n_tasks > 0:
+        queue = subprocess.check_output(['squeue', '-u', getuser()])
+        tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
+        n_tasks = len(tasks)
         calc_progress(out_logs, n_total)
         time.sleep(2)
     # to ensure a full bar after all tasks have finished.
