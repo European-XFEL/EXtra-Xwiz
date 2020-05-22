@@ -5,7 +5,7 @@ Attempt to create an - as much as possible automated - workflow for typical SFX 
 1. use the *https* link on the project front page to clone, or download from  
    there directly.
 2. move into the cloned repository folder and ``git checkout dev``
-3. make sure you use EuXFEL-Anaconda3: ``module load exfel exfel_anconda3``  
+3. make sure you use EuXFEL-Anaconda3: ``module load exfel exfel_anaconda3``  
 4. type ``pip install --user -e .`` (still in the repository parent folder)
 5. type ``export PATH="/home/<your_name>/.local/bin:$PATH"`` (or add to
    resource file)
