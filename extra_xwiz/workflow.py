@@ -303,7 +303,7 @@ class Workflow:
             _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
             if _vds_name != '':
                 self.vds_name = _vds_name
-        if not os.path.exists(f'{self.work_dir}/{self.vds_name}'):
+        if not ( os.path.exists(f'{self.work_dir}/{self.vds_name}') or os.path.exists(f'{self.vds_name}') ):
             os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
         else:
             print('Requested VDS is present already.')
