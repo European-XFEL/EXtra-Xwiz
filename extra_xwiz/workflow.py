@@ -42,6 +42,7 @@ class Workflow:
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
+        self.cell_tolerance = conf['frame_filter']['match_tolerance']
         self.integration_radii = conf['proc_fine']['integration_radii']
         self.point_group = conf['merging']['point_group']
         self.scale_model = conf['merging']['scaling_model']
@@ -241,7 +242,8 @@ class Workflow:
         """Select diffraction frames from match vs. good cell
         """
         self.hit_list, self.cell_ensemble = \
-            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file,
+                               self.cell_tolerance)
         print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
         report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
         self.write_hit_list()
@@ -362,6 +364,13 @@ class Workflow:
             self.wrap_process()
 
         print('\n-----   TASK: check crystal frames and refine unit cell -----')
+        if self.interactive:
+            _cell_tolerance = input(f'Match tolerance of frame-cells vs. expectation [{self.cell_tolerance}] > ')
+            if _cell_tolerance != '':
+                try:
+                    self.cell_tolerance = float(_cell_tolerance)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default')
         # first filter indexed frames, then update cell based on crystals found
         self.fit_filtered_crystals()
 

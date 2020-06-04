@@ -28,6 +28,9 @@ index_method = "mosflm"
 unit_cell = "hewl.cell"
 n_cores = 40
 
+[frame_filter]
+match_tolerance = 0.1
+
 [proc_fine]
 resolution = 2.0
 integration_radii = "2,3,5"

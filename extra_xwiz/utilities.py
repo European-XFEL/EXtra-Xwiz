@@ -152,7 +152,7 @@ def wait_single(job_id, n_total):
     print()
 
 
-def cell_in_tolerance(probe_constants, reference_file):
+def cell_in_tolerance(probe_constants, reference_file, tolerance):
     """Compare cell constants of one crystal from indexing with expectation
     """
     const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
@@ -164,14 +164,14 @@ def cell_in_tolerance(probe_constants, reference_file):
             if ln.split()[0] in const_names:
                 reference_value.append(float(ln.split()[2]))
     for i in range(6):
-        if probe_constants[i] < 0.9 * reference_value[i]:
+        if probe_constants[i] < (1 - tolerance) * reference_value[i]:
             return False
-        if probe_constants[i] > 1.1 * reference_value[i]:
+        if probe_constants[i] > (1 + tolerance) * reference_value[i]:
             return False
     return True
 
 
-def get_crystal_frames(stream_file, cell_file):
+def get_crystal_frames(stream_file, cell_file, tolerance):
     """ Parse stream file after indexamajig run.
         Check crystals of indexed frames; if they match a prior expectation,
         add event number (frame) and cell constants to respective lists.
@@ -186,7 +186,7 @@ def get_crystal_frames(stream_file, cell_file):
                 cell_edges = [(10 * float(x)) for x in ln.split()[2:5]]
                 cell_angles = [float(x) for x in ln.split()[6:9]]
                 cell_constants = cell_edges + cell_angles
-                if not cell_in_tolerance(cell_constants, cell_file):
+                if not cell_in_tolerance(cell_constants, cell_file, tolerance):
                     continue
                 cell_ensemble.append(cell_constants)
                 hit_list.append(event)
