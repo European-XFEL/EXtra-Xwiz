@@ -197,7 +197,7 @@ class Workflow:
 
     def concat(self):
 
-        chunks = glob(f'{self.list_prefix}_*.stream')
+        chunks = sorted(glob(f'{self.list_prefix}_*.stream'))
         with open(f'{self.list_prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
             for ln in f_in:
                 f_out.write(ln)
