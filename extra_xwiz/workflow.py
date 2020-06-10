@@ -19,11 +19,12 @@ from .summary import (create_new_summary, report_cell_check, report_step_rate,
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, automatic=False):
+    def __init__(self, home_dir, work_dir, automatic=False, reprocess=False):
 
         self.home_dir = home_dir
         self.work_dir = work_dir
         self.interactive = not automatic
+        self.reprocess = reprocess
         self.exp_ids = np.array([])
         conf = config.load_from_file()
         self.data_path = conf['data']['path']
@@ -100,7 +101,7 @@ class Workflow:
                 else:
                     warnings.warn('Indexing method not known; default kept.')
 
-            _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR ["none"] > ')
+            _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR [none] > ')
             if _cell_file != '':
                 if _cell_file == 'none':
                     print('Processing without prior unit cell - unknown crystal geometry.')
@@ -291,7 +292,71 @@ class Workflow:
             os.remove(fn)
         report_merging_metrics(self.list_prefix)
 
+    def process_late(self):
+
+        print('\n-----   TASK: run final CrystFEL with refined cell ------')
+        self.step += 1
+        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
+        job_id = self.process_slurm_single(res_limit, cell_keyword)
+        wait_single(job_id, len(self.hit_list))
+        report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
+                         self.step, res_limit)
+        report_total_rate(self.list_prefix, self.n_frames)
+        report_cells(self.list_prefix, self.cell_info)
+
+        print('\n-----   TASK: scale/merge data and create statistics -----')
+        if self.interactive:
+            _point_group = input(f'Point group symmetry [{self.point_group}] > ')
+            if _point_group != '':
+                if _point_group in POINT_GROUPS:
+                    self.point_group = _point_group
+                else:
+                    warnings.warn('Point group not recognized')
+                    print('[default kept]')
+            _scale_model = input(f'Scaling model to use [{self.scale_model}] > ')
+            if _scale_model != '':
+                if _scale_model in ['unity', 'scsphere']:
+                    self.scale_model = _scale_model
+                else:
+                    warnings.warn('Model type not recognized')
+                    print('[default kept]')
+            _scale_iter = input(f'Number of iterations [{self.scale_iter}] > ')
+            if _scale_iter != '':
+                try:
+                    self.scale_iter = int(_scale_iter)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default.')
+
+        self.merge_bragg_obs()
+
+    def check_late_entry(self):
+
+        if self.interactive:
+            _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
+            if _list_prefix != '':
+                self.list_prefix = _list_prefix
+            _cell_file = input(f'Unit cell file [{self.cell_file}_refined] > ')
+            if _cell_file == '':
+                self.cell_file = f'{self.cell_file}_refined'
+            else:
+                self.cell_file = f'{_cell_file}_refined'
+        n_issues = 0
+        if not os.path.exists(f'{self.list_prefix}_hits.lst'):
+            warnings.warn('Cannot find pre-selection of indexed detector frames')
+            n_issues += 1
+        if not os.path.exists(self.cell_file):
+            warnings.warn('Cannot find cell file with refined unit cell')
+            n_issues += 1
+        if n_issues > 0:
+            print(f'Found {n_issues} issues. Make sure you have run a workflow'
+                  ' for the present configuration before.)')
+            exit()
+        self.process_late()
+
     def manage(self):
+
+        if self.reprocess:
+            self.check_late_entry()
 
         print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:
@@ -374,40 +439,7 @@ class Workflow:
         # first filter indexed frames, then update cell based on crystals found
         self.fit_filtered_crystals()
 
-        print('\n-----   TASK: run final CrystFEL with refined cell ------')
-        self.step += 1
-        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
-        job_id = self.process_slurm_single(res_limit, cell_keyword)
-        wait_single(job_id, len(self.hit_list))
-        report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
-                         self.step, res_limit)
-        report_total_rate(self.list_prefix, self.n_frames)
-        report_cells(self.list_prefix, self.cell_info)
-
-        print('\n-----   TASK: scale/merge data and create statistics -----')
-        if self.interactive:
-            _point_group = input(f'Point group symmetry [{self.point_group}] > ')
-            if _point_group != '':
-                if _point_group in POINT_GROUPS:
-                    self.point_group = _point_group
-                else:
-                    warnings.warn('Point group not recognized')
-                    print('[default kept]')
-            _scale_model = input(f'Scaling model to use [{self.scale_model}] > ')
-            if _scale_model != '':
-                if _scale_model in ['unity', 'scsphere']:
-                    self.scale_model = _scale_model
-                else:
-                    warnings.warn('Model type not recognized')
-                    print('[default kept]')
-            _scale_iter = input(f'Number of iterations [{self.scale_iter}] > ')
-            if _scale_iter != '':
-                try:
-                    self.scale_iter = int(_scale_iter)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
-
-        self.merge_bragg_obs()
+        self.process_late()
 
 
 def main(argv=None):
@@ -415,6 +447,11 @@ def main(argv=None):
     ap.add_argument(
         "-a", "--automatic", help="enable auto-pipeline workflow"
         " (skip configuration review)",
+        action='store_true'
+    )
+    ap.add_argument(
+        "-r", "--reprocess", help="enter workflow at the re-processing stage"
+        " (refined unit cell and frame selection exist)",
         action='store_true'
     )
     args = ap.parse_args(argv)
@@ -428,7 +465,8 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir, automatic=args.automatic)
+    workflow = Workflow(home_dir, work_dir, automatic=args.automatic,
+                        reprocess=args.reprocess)
     workflow.manage()
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
