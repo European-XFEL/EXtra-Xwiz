@@ -14,7 +14,8 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
-                      report_total_rate, report_cells, report_merging_metrics)
+                      report_total_rate, report_cells, report_merging_metrics,
+                      report_reprocess)
 
 
 class Workflow:
@@ -329,7 +330,7 @@ class Workflow:
 
         self.merge_bragg_obs()
 
-    def check_late_entry(self):
+    def check_late_entrance(self):
 
         if self.interactive:
             _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
@@ -351,12 +352,15 @@ class Workflow:
             print(f'Found {n_issues} issues. Make sure you have run a workflow'
                   ' for the present configuration before.)')
             exit()
+        self.hit_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
+        report_reprocess(self.list_prefix)
         self.process_late()
 
     def manage(self):
 
         if self.reprocess:
-            self.check_late_entry()
+            self.check_late_entrance()
+            return
 
         print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:

@@ -58,7 +58,7 @@ def report_cells(prefix, cell_strings):
 
 
 def report_merging_metrics(prefix):
-    """Report overall (unbinned) crystallographic figures-of-merit
+    """Report overall (un-binned) crystallographic figures-of-merit
     """
     labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
     fstring = ['{:8.2f}', '{:8.2f}', '{:8.4f}', '{:8.4f}', '{:8.2f}']
@@ -77,3 +77,10 @@ def report_merging_metrics(prefix):
                 w_sum += int(item[cw])
                 f_sum += (int(item[cw]) * float(item[cf]))
             f.write('{:18}'.format(labels[i]) + fstring[i].format(f_sum/w_sum) + '\n')
+
+
+def report_reprocess(prefix):
+    """Report start of a reprocessing step
+    """
+    with open(f'{prefix}.summary', 'a') as f:
+        f.write('\n###   Reprocessing   ####\n')
