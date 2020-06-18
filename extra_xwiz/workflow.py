@@ -225,7 +225,7 @@ class Workflow:
         self.prep_distribute()
         if self.n_frames > self.exp_ids.shape[0]:
             warnings.warn('Requested number of frames too large, reset to'
-                          f'total frame number of {self.exp_ids.shape[0]}.')
+                          f' total frame number of {self.exp_ids.shape[0]}.')
             self.n_frames = self.exp_ids.shape[0]
         sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes)
         for chunk, indices in enumerate(sub_indices):
@@ -240,9 +240,14 @@ class Workflow:
         n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
         print('total number of processed files:   {:5d}'.format(n_files))
         print('average number of frames per file: {:.1f}'.format(average_n_frames))
-        print('estimated total number of frames:', int(average_n_frames * n_files))
+        print('estimated total number of frames:',
+              int(average_n_frames * n_files))
         self.prep_distribute()
-        n_used_files = self.n_frames // average_n_frames
+        n_used_files = int(round(self.n_frames / average_n_frames))
+        if n_used_files > n_files:
+            warnings.warn('Number of used files from requested number of'
+                          f' frames exceeds total, reset to {n_files}.')
+            n_used_files = n_files
         file_indices = np.array_split(np.arange(n_used_files), self.n_nodes)
         file_items = sorted([os.path.join(dp, f) for dp, dn, fn in os.walk(self.data_path) for f in fn])
         for chunk, indices in enumerate(file_indices):
