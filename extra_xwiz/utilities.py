@@ -2,6 +2,7 @@
 
 from getpass import getuser
 from glob import glob
+import h5py
 import numpy as np
 from scipy.optimize import curve_fit
 import subprocess
@@ -241,3 +242,23 @@ def cell_as_string(cell_file):
     cell_string = '{:20}'.format(cell_file) + \
                   '  '.join([item[1] for item in cell_info]) + '\n'
     return cell_string
+
+
+def scan_cheetah_proc_dir(path):
+    """Get all HDF5 file paths/names of a Cheetah-processed run folder by
+       recursion, sample 1% of them for the frame number contained
+       :param path:  HDF5 data path given by config
+       :return:      total number of files, average frame number as per sample
+    """
+    items = [os.path.join(dp, f) for dp, dn, fn in os.walk(path) for f in fn]
+    n_files = len(items)
+    samples = []
+    n_frames = 0
+    while len(samples) < (n_files // 100):
+        j = np.random.randint(n_files)
+        if j not in samples:
+            with h5py.File(items[j], 'r') as f:
+                data = f['data/data'][()]
+            n_frames += data.shape[0]
+            samples.append(j)
+    return n_files, (n_frames / len(samples))

@@ -12,7 +12,8 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
                         POINT_GROUPS)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
-                        fit_unit_cell, replace_cell, cell_as_string)
+                        fit_unit_cell, replace_cell, cell_as_string,
+                        scan_cheetah_proc_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess)
@@ -187,8 +188,9 @@ class Workflow:
 
     def cheetah_distribute(self):
         print('\n-----   TASK: analyse Cheetah input   -----')
-        for item in os.path.listdir(self.data_path):
-            print(item)
+        n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
+        print('average number of frames per file: {:.1f}'.format(average_n_frames))
+        print('estimated total number of frames:', int(average_n_frames * n_files))
         exit()
 
     def make_virtual(self):
