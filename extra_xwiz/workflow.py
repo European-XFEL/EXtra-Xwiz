@@ -20,12 +20,14 @@ from .summary import (create_new_summary, report_cell_check, report_step_rate,
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, automatic=False, reprocess=False):
+    def __init__(self, home_dir, work_dir, automatic=False, reprocess=False,
+                 use_cheetah=False):
 
         self.home_dir = home_dir
         self.work_dir = work_dir
         self.interactive = not automatic
         self.reprocess = reprocess
+        self.use_cheetah = use_cheetah
         self.exp_ids = np.array([])
         conf = config.load_from_file()
         self.data_path = conf['data']['path']
@@ -183,7 +185,45 @@ class Workflow:
                          self.step, res_limit)
         self.clean_up(job_id)
 
+    def cheetah_distribute(self):
+        print('\n-----   TASK: analyse Cheetah input   -----')
+        for item in os.path.listdir(self.data_path):
+            print(item)
+        exit()
+
+    def make_virtual(self):
+        print('\n-----   TASK: create virtual data set   -----')
+        if self.interactive:
+            _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
+            if _vds_name != '':
+                self.vds_name = _vds_name
+        if not ( os.path.exists(f'{self.work_dir}/{self.vds_name}') or os.path.exists(f'{self.vds_name}') ):
+            os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
+        else:
+            print('Requested VDS is present already.')
+        with h5py.File(self.vds_name, 'r') as f:
+            self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
+        print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
+
     def distribute(self):
+
+        print('\n-----   TASK: prepare distributed computing from virtual data set  -----')
+        if self.interactive:
+            _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
+            if _n_frames != '':
+                try:
+                    self.n_frames = int(_n_frames)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default.')
+            _n_nodes = input(f'Number of nodes [{self.n_nodes}] > ')
+            if _n_nodes != '':
+                try:
+                    self.n_nodes = int(_n_nodes)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default.')
+            _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
+            if _list_prefix != '':
+                self.list_prefix = _list_prefix
 
         if self.n_frames > self.exp_ids.shape[0]:
             warnings.warn('Requested number of frames too large, reset to'
@@ -362,7 +402,6 @@ class Workflow:
             self.process_late()
             return
 
-        print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:
             _data_path = input(f'Data path [{self.data_path}] > ')
             if _data_path != '':
@@ -371,35 +410,12 @@ class Workflow:
                     self.data_path = _data_path
                 else:
                     print(' [file not found - config kept]')
-            _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
-            if _vds_name != '':
-                self.vds_name = _vds_name
-        if not ( os.path.exists(f'{self.work_dir}/{self.vds_name}') or os.path.exists(f'{self.vds_name}') ):
-            os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
-        else:
-            print('Requested VDS is present already.')
-        with h5py.File(self.vds_name, 'r') as f:
-            self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
-        print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
 
-        print('\n-----   TASK: prepare distributed computing   -----')
-        if self.interactive:
-            _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
-            if _n_frames != '':
-                try:
-                    self.n_frames = int(_n_frames)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
-            _n_nodes = input(f'Number of nodes [{self.n_nodes}] > ')
-            if _n_nodes != '':
-                try:
-                    self.n_nodes = int(_n_nodes)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
-            _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
-            if _list_prefix != '':
-                self.list_prefix = _list_prefix
-        self.distribute()
+        if self.use_cheetah:
+            self.cheetah_distribute()
+        else:
+            self.make_virtual()
+            self.distribute()
 
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
@@ -458,6 +474,11 @@ def main(argv=None):
         " (refined unit cell and frame selection exist)",
         action='store_true'
     )
+    ap.add_argument(
+        "-c", "--cheetah-input", help="skip VDS generation and assemble input"
+        " from Cheetah folder contents",
+        action='store_true'
+    )
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
@@ -469,8 +490,10 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir, automatic=args.automatic,
-                        reprocess=args.reprocess)
+    workflow = Workflow(home_dir, work_dir,
+                        automatic=args.automatic,
+                        reprocess=args.reprocess,
+                        use_cheetah=args.cheetah_input)
     workflow.manage()
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
