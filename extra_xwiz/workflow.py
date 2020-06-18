@@ -186,13 +186,6 @@ class Workflow:
                          self.step, res_limit)
         self.clean_up(job_id)
 
-    def cheetah_distribute(self):
-        print('\n-----   TASK: analyse Cheetah input   -----')
-        n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
-        print('average number of frames per file: {:.1f}'.format(average_n_frames))
-        print('estimated total number of frames:', int(average_n_frames * n_files))
-        exit()
-
     def make_virtual(self):
         print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:
@@ -207,9 +200,9 @@ class Workflow:
             self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
         print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
 
-    def distribute(self):
+    def prep_distribute(self):
 
-        print('\n-----   TASK: prepare distributed computing from virtual data set  -----')
+        print('\n-----   TASK: prepare distributed computing   -----')
         if self.interactive:
             _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
             if _n_frames != '':
@@ -227,6 +220,9 @@ class Workflow:
             if _list_prefix != '':
                 self.list_prefix = _list_prefix
 
+    def distribute_vds(self):
+
+        self.prep_distribute()
         if self.n_frames > self.exp_ids.shape[0]:
             warnings.warn('Requested number of frames too large, reset to'
                           f'total frame number of {self.exp_ids.shape[0]}.')
@@ -238,6 +234,24 @@ class Workflow:
                 for index in indices:
                     f.write(f'{self.vds_name} //{index}\n')
         print()
+
+    def distribute_cheetah(self):
+        print('\n-----   TASK: analyse and distribute Cheetah input   -----')
+        n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
+        print('total number of processed files:   {:5d}'.format(n_files))
+        print('average number of frames per file: {:.1f}'.format(average_n_frames))
+        print('estimated total number of frames:', int(average_n_frames * n_files))
+        self.prep_distribute()
+        n_used_files = self.n_frames // average_n_frames
+        file_indices = np.array_split(np.arange(n_used_files), self.n_nodes)
+        file_items = sorted([os.path.join(dp, f) for dp, dn, fn in os.walk(self.data_path) for f in fn])
+        for chunk, indices in enumerate(file_indices):
+            print(len(indices), end=' ')
+            with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
+                for index in indices:
+                    f.write(f'{file_items[index]}\n')
+        print()
+        exit()
 
     def concat(self):
 
@@ -414,10 +428,10 @@ class Workflow:
                     print(' [file not found - config kept]')
 
         if self.use_cheetah:
-            self.cheetah_distribute()
+            self.distribute_cheetah()
         else:
             self.make_virtual()
-            self.distribute()
+            self.distribute_vds()
 
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:

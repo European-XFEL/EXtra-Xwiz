@@ -250,14 +250,14 @@ def scan_cheetah_proc_dir(path):
        :param path:  HDF5 data path given by config
        :return:      total number of files, average frame number as per sample
     """
-    items = [os.path.join(dp, f) for dp, dn, fn in os.walk(path) for f in fn]
-    n_files = len(items)
+    file_items = [os.path.join(dp, f) for dp, dn, fn in os.walk(path) for f in fn]
+    n_files = len(file_items)
     samples = []
     n_frames = 0
     while len(samples) < (n_files // 100):
         j = np.random.randint(n_files)
         if j not in samples:
-            with h5py.File(items[j], 'r') as f:
+            with h5py.File(file_items[j], 'r') as f:
                 data = f['data/data'][()]
             n_frames += data.shape[0]
             samples.append(j)
