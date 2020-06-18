@@ -353,13 +353,13 @@ class Workflow:
                   ' for the present configuration before.)')
             exit()
         self.hit_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
-        report_reprocess(self.list_prefix)
-        self.process_late()
 
     def manage(self):
 
         if self.reprocess:
             self.check_late_entrance()
+            report_reprocess(self.list_prefix)
+            self.process_late()
             return
 
         print('\n-----   TASK: create virtual data set   -----')
