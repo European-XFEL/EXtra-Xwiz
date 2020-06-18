@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 import subprocess
 import os, re, time
+import warnings
 
 
 def estimate_moments(sample):
@@ -258,7 +259,17 @@ def scan_cheetah_proc_dir(path):
         j = np.random.randint(n_files)
         if j not in samples:
             with h5py.File(file_items[j], 'r') as f:
-                data = f['data/data'][()]
+                try:
+                    data = f['data/data'][()]
+                except KeyError:
+                    warnings.warn('The content of your HDF5 data does not seem'
+                                  ' to stem from Cheetah based on EuXFEL/'
+                                  'AGIPD-1M')
+                    exit(0)
+            if len(data.shape) != 4 or data.shape[1] != 16:
+                warnings.warn('The content of your HDF5 data does not seem to'
+                              ' stem from Cheetah based on EuXFEL/AGIPD-1M')
+                exit(0)
             n_frames += data.shape[0]
             samples.append(j)
     return n_files, (n_frames / len(samples))
