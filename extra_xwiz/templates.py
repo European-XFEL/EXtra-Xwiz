@@ -42,14 +42,25 @@ scaling_iterations = 1
 max_adu = 100000
 """
 
+MAKE_VDS = """\
+#!/bin/sh
+source /usr/share/Modules/init/sh
+
+module load exfel
+module load exfel_anaconda3/1.1
+
+extra-data-make-virtual-cxi \\
+  %(DATA_PATH)s \\
+  -o %(VDS_NAME)s 
+"""
+
 PROC_BASH_SLURM = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel 
-module load spack
-spack load crystfel
 module load ccp4/7.0
+module load maxwell
+module load crystfel/0.8.0
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -71,10 +82,9 @@ PROC_BASH_DIRECT = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel 
-module load spack
-spack load crystfel
 module load ccp4/7.0
+module load maxwell
+module load crystfel/0.8.0
 
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
@@ -98,9 +108,8 @@ PARTIALATOR_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel
+module load maxwell
+module load crystfel/0.8.0
 
 partialator \\
     -i %(PREFIX)s_hits.stream \\
@@ -115,9 +124,8 @@ CHECK_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel
+module load maxwell
+module load crystfel/0.8.0
 
 check_hkl \\
     %(PREFIX)s_merged.hkl \\
@@ -130,9 +138,9 @@ check_hkl \\
 COMPARE_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
-module load exfel
-module load spack
-spack load crystfel
+
+module load maxwell
+module load crystfel/0.8.0
 
 compare_hkl \\
     %(PREFIX)s_merged.hkl1 \\
@@ -145,10 +153,11 @@ compare_hkl \\
 """
 
 CELL_EXPLORER_WRAP = """\
+#!/bin/sh
 source /usr/share/Modules/init/sh
-module load exfel
-module load spack
-spack load crystfel
+
+module load maxwell
+module load crystfel/0.8.0
 
 cell_explorer %(PREFIX)s.stream
 """

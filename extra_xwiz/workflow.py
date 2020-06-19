@@ -10,7 +10,7 @@ import warnings
 from . import config
 from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
-                        POINT_GROUPS)
+                        POINT_GROUPS, MAKE_VDS)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string,
                         scan_cheetah_proc_dir)
@@ -193,7 +193,12 @@ class Workflow:
             if _vds_name != '':
                 self.vds_name = _vds_name
         if not ( os.path.exists(f'{self.work_dir}/{self.vds_name}') or os.path.exists(f'{self.vds_name}') ):
-            os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
+            with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
+                f.write(MAKE_VDS % {'DATA_PATH': self.data_path,
+                                    'VDS_NAME': self.vds_name
+                                    })
+            subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
+            #os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
         else:
             print('Requested VDS is present already.')
         with h5py.File(self.vds_name, 'r') as f:
