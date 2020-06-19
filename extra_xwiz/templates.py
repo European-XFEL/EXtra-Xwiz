@@ -59,8 +59,9 @@ PROC_BASH_SLURM = """\
 source /usr/share/Modules/init/sh
 
 module load ccp4/7.0
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -83,8 +84,9 @@ PROC_BASH_DIRECT = """\
 source /usr/share/Modules/init/sh
 
 module load ccp4/7.0
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
@@ -108,8 +110,9 @@ PARTIALATOR_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 partialator \\
     -i %(PREFIX)s_hits.stream \\
@@ -124,8 +127,9 @@ CHECK_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 check_hkl \\
     %(PREFIX)s_merged.hkl \\
@@ -139,8 +143,9 @@ COMPARE_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 compare_hkl \\
     %(PREFIX)s_merged.hkl1 \\
@@ -156,8 +161,9 @@ CELL_EXPLORER_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load maxwell
-module load crystfel/0.8.0
+module load exfel
+module load spack
+spack load crystfel
 
 cell_explorer %(PREFIX)s.stream
 """
