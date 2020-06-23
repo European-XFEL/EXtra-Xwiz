@@ -61,7 +61,7 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -86,7 +86,7 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
@@ -112,7 +112,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 partialator \\
     -i %(PREFIX)s_hits.stream \\
@@ -129,7 +129,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 check_hkl \\
     %(PREFIX)s_merged.hkl \\
@@ -145,7 +145,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 compare_hkl \\
     %(PREFIX)s_merged.hkl1 \\
@@ -163,7 +163,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel
+spack load crystfel@0.8.0
 
 cell_explorer %(PREFIX)s.stream
 """

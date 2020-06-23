@@ -261,7 +261,6 @@ class Workflow:
                 for index in indices:
                     f.write(f'{file_items[index]}\n')
         print()
-        exit()
 
     def concat(self):
 

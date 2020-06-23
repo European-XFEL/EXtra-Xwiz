@@ -160,11 +160,18 @@ def cell_in_tolerance(probe_constants, reference_file, tolerance):
     const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
     reference_value = []
     with open(reference_file, 'r') as f:
-        for ln in f:
-            if ' = ' not in ln:
-                continue
-            if ln.split()[0] in const_names:
-                reference_value.append(float(ln.split()[2]))
+        if reference_file[-4:] == 'cell':
+            print(' check against crystfel unit cell format:')
+            for ln in f:
+                if ' = ' not in ln:
+                    continue
+                if ln.split()[0] in const_names:
+                    reference_value.append(float(ln.split()[2]))
+        elif reference_file[-4:] == '.pdb':
+            print(' check against pdb unit cell format:')
+            for ln in f:
+                if ln[:6] == 'CRYST1':
+                    reference_value = [float(x) for x in ln.split()[1:7]]
     for i in range(6):
         if probe_constants[i] < (1 - tolerance) * reference_value[i]:
             return False
