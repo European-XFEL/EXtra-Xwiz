@@ -283,7 +283,7 @@ class Workflow:
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
             for hit_event in self.hit_list:
-                f.write(f'{self.vds_name} {hit_event}\n')
+                f.write(f'{hit_event}\n')
 
     def cell_explorer(self):
         """Identify initial unit cell from a relatively small number of frames

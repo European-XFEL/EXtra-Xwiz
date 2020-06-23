@@ -161,14 +161,12 @@ def cell_in_tolerance(probe_constants, reference_file, tolerance):
     reference_value = []
     with open(reference_file, 'r') as f:
         if reference_file[-4:] == 'cell':
-            print(' check against crystfel unit cell format:')
             for ln in f:
                 if ' = ' not in ln:
                     continue
                 if ln.split()[0] in const_names:
                     reference_value.append(float(ln.split()[2]))
         elif reference_file[-4:] == '.pdb':
-            print(' check against pdb unit cell format:')
             for ln in f:
                 if ln[:6] == 'CRYST1':
                     reference_value = [float(x) for x in ln.split()[1:7]]
@@ -187,10 +185,21 @@ def get_crystal_frames(stream_file, cell_file, tolerance):
     """
     hit_list = []
     cell_ensemble = []
+
+    if cell_file[-4:] == 'cell':
+        print(' check against CrystFEL unit-cell format:')
+    elif cell_file[-4:] == '.pdb':
+        print(' check against PDB/CRYST1 unit-cell format:')
+    else:
+        warnings.warn(' Unit cell file not recognized by extension!')
+
     with open(stream_file, 'r') as f:
         for ln in f:
+            if 'Image filename:' in ln:
+                event_fn = ln.split()[-1]   # path to VDS or Cheetah.h5
             if 'Event:' in ln:
-                event = ln.split()[-1]  # includes '//'
+                event_id = ln.split()[-1]   # includes '//'
+                event = f'{event_fn} {event_id}'
             if 'Cell parameters' in ln:
                 cell_edges = [(10 * float(x)) for x in ln.split()[2:5]]
                 cell_angles = [float(x) for x in ln.split()[6:9]]
