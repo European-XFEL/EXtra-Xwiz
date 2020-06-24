@@ -266,22 +266,21 @@ def replace_cell(fn, const_values):
             new_cryst += f' {geom}'
             f_out.write(new_cryst)
     else:
-        warnings.warn(' Cell file is of unknown type')
+        warnings.warn(' Cell file is of unknown type (by extension)!')
 
 
 def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
+    cell_string = '{:20}'.format(cell_file)
     if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
         cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
-        cell_string = '{:20}'.format(cell_file) + \
-                      '  '.join([item[1] for item in cell_info]) + '\n'
-    elif cell_file[-4:] == '.pdb ' or cell_file[-12:] == '.pdb_refined':
+        cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
+    elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
         cell_info = open(cell_file).read().splitlines()[0].split()[1:]
-        cell_string = ' '.join(cell_info[6:]) + '   ' + '   '.join(cell_info[:6])
+        cell_string += '  '.join(cell_info[6:]) + '  ' + '  '.join(cell_info[:6])
     else:
-        warnings.warn(' Cell file is of unknown type')
-        cell_string = ''
+        warnings.warn(' Cell file is of unknown type (by extension)!')
     return cell_string
 
 
