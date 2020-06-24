@@ -2,10 +2,12 @@
 
 from getpass import getuser
 from glob import glob
+import h5py
 import numpy as np
 from scipy.optimize import curve_fit
 import subprocess
 import os, re, time
+import warnings
 
 
 def estimate_moments(sample):
@@ -158,11 +160,18 @@ def cell_in_tolerance(probe_constants, reference_file, tolerance):
     const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
     reference_value = []
     with open(reference_file, 'r') as f:
-        for ln in f:
-            if ' = ' not in ln:
-                continue
-            if ln.split()[0] in const_names:
-                reference_value.append(float(ln.split()[2]))
+        if reference_file[-5:] == '.cell':
+            for ln in f:
+                if ' = ' not in ln:
+                    continue
+                if ln.split()[0] in const_names:
+                    reference_value.append(float(ln.split()[2]))
+        elif reference_file[-4:] == '.pdb':
+            for ln in f:
+                if ln[:6] == 'CRYST1':
+                    reference_value = [float(x) for x in ln.split()[1:7]]
+        else:
+            warnings.warn(' Cell file is of unknown type')
     for i in range(6):
         if probe_constants[i] < (1 - tolerance) * reference_value[i]:
             return False
@@ -178,10 +187,21 @@ def get_crystal_frames(stream_file, cell_file, tolerance):
     """
     hit_list = []
     cell_ensemble = []
+
+    if cell_file[-5:] == '.cell':
+        print(' check against CrystFEL unit-cell format:')
+    elif cell_file[-4:] == '.pdb':
+        print(' check against PDB/CRYST1 unit-cell format:')
+    else:
+        warnings.warn(' Unit cell file not recognized by extension!')
+
     with open(stream_file, 'r') as f:
         for ln in f:
+            if 'Image filename:' in ln:
+                event_fn = ln.split()[-1]   # path to VDS or Cheetah.h5
             if 'Event:' in ln:
-                event = ln.split()[-1]  # includes '//'
+                event_id = ln.split()[-1]   # includes '//'
+                event = f'{event_fn} {event_id}'
             if 'Cell parameters' in ln:
                 cell_edges = [(10 * float(x)) for x in ln.split()[2:5]]
                 cell_angles = [float(x) for x in ln.split()[6:9]]
@@ -213,31 +233,82 @@ def replace_cell(fn, const_values):
     """ Write a new cell file based on the provided one, containing the new
         constants as defined by fitting.
     """
-    const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
-    cell_dict = {}
-    for i in range(6):
-        cell_dict[const_names[i]] = const_values[i]
-    lines = []
-    # read existing cell file
-    with open(fn, 'r') as f_in:
-        for ln in f_in:
-            lines.append(ln)
-    # write new cell file
-    with open(f'{fn}_refined', 'w') as f_out:
-        for ln in lines:
-            items = ln.split()
-            if len(items) >= 3 and items[0] in const_names:
-                items[2] = '{:.2f}'.format(cell_dict[items[0]])
-                new_ln = ' '.join(items)
-                f_out.write(new_ln + '\n')
-            else:
-                f_out.write(ln)
+    if fn[-5:] == '.cell':
+        const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
+        cell_dict = {}
+        for i in range(6):
+            cell_dict[const_names[i]] = const_values[i]
+        lines = []
+        # read existing cell file
+        with open(fn, 'r') as f_in:
+            for ln in f_in:
+                lines.append(ln)
+        # write new cell file
+        with open(f'{fn}_refined', 'w') as f_out:
+            for ln in lines:
+                items = ln.split()
+                if len(items) >= 3 and items[0] in const_names:
+                    items[2] = '{:.2f}'.format(cell_dict[items[0]])
+                    new_ln = ' '.join(items)
+                    f_out.write(new_ln + '\n')
+                else:
+                    f_out.write(ln)
+
+    elif fn[-4:] == '.pdb':
+        with open(fn, 'r') as f_in:
+            for ln in f_in:
+                if ln[:6] == 'CRYST1':
+                    geom = ' '.join(ln.split()[7:])
+        with open(f'{fn}_refined', 'w') as f_out:
+            new_cryst = 'CRYST1'
+            new_cryst += ''.join([f'{v:9.3f}' for v in const_values[:3]])
+            new_cryst += ''.join([f'{v:7.2f}' for v in const_values[3:6]])
+            new_cryst += f' {geom}'
+            f_out.write(new_cryst)
+    else:
+        warnings.warn(' Cell file is of unknown type (by extension)!')
 
 
 def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
-    cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
-    cell_string = '{:20}'.format(cell_file) + \
-                  '  '.join([item[1] for item in cell_info]) + '\n'
+    cell_string = '{:20}'.format(cell_file)
+    if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
+        cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+        cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
+    elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
+        cell_info = open(cell_file).read().splitlines()[0].split()[1:]
+        cell_string += '  '.join(cell_info[6:]) + '  ' + '  '.join(cell_info[:6])
+    else:
+        warnings.warn(' Cell file is of unknown type (by extension)!')
     return cell_string
+
+
+def scan_cheetah_proc_dir(path):
+    """Get all HDF5 file paths/names of a Cheetah-processed run folder by
+       recursion, sample 1% of them for the frame number contained
+       :param path:  HDF5 data path given by config
+       :return:      total number of files, average frame number as per sample
+    """
+    file_items = [os.path.join(dp, f) for dp, dn, fn in os.walk(path) for f in fn]
+    n_files = len(file_items)
+    samples = []
+    n_frames = 0
+    while len(samples) < (n_files // 100):
+        j = np.random.randint(n_files)
+        if j not in samples:
+            with h5py.File(file_items[j], 'r') as f:
+                try:
+                    data = f['data/data'][()]
+                except KeyError:
+                    warnings.warn('The content of your HDF5 data does not seem'
+                                  ' to stem from Cheetah based on EuXFEL/'
+                                  'AGIPD-1M')
+                    exit(0)
+            if len(data.shape) != 4 or data.shape[1] != 16:
+                warnings.warn('The content of your HDF5 data does not seem to'
+                              ' stem from Cheetah based on EuXFEL/AGIPD-1M')
+                exit(0)
+            n_frames += data.shape[0]
+            samples.append(j)
+    return n_files, (n_frames / len(samples))
