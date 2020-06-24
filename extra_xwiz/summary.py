@@ -61,13 +61,14 @@ def report_merging_metrics(prefix):
     """Report overall (un-binned) crystallographic figures-of-merit
     """
     labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
-    fstring = ['{:8.2f}', '{:8.2f}', '{:8.4f}', '{:8.4f}', '{:8.2f}']
+    fstring = ['{:12.2f}', '{:12.2f}', '{:12.4f}', '{:12.4f}', '{:12.2f}']
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('\nCrystallographic FOMs:\n')
+        f.write('\nCrystallographic FOMs:')
+        f.write('\n                        overall    highest shell\n')
         for i, table in enumerate(['completeness', 'completeness', 'cchalf',
                                    'ccstar', 'rsplit']):
-            cw = [1,1,2,2,2][i]
-            cf = [3,6,1,1,1][i]
+            cw = [1, 1, 2, 2, 2][i]  # column index for n_reflections = weight
+            cf = [3, 6, 1, 1, 1][i]  # column index for respective FOM value
             with open(f'{prefix}_{table}.dat', 'r') as fd:
                 data_lines = fd.readlines()[1:]
             w_sum = 0.0
@@ -76,7 +77,10 @@ def report_merging_metrics(prefix):
                 item = ln.split()
                 w_sum += int(item[cw])
                 f_sum += (int(item[cw]) * float(item[cf]))
-            f.write('{:18}'.format(labels[i]) + fstring[i].format(f_sum/w_sum) + '\n')
+            # last line = high-resolution shell
+            fom_high = float(data_lines[-1].split()[cf])
+            f.write('{:22}'.format(labels[i]) + fstring[i].format(f_sum/w_sum)
+                    + fstring[i].format(fom_high) + '\n')
 
 
 def report_reprocess(prefix):
