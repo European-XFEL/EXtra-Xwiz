@@ -160,7 +160,7 @@ def cell_in_tolerance(probe_constants, reference_file, tolerance):
     const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
     reference_value = []
     with open(reference_file, 'r') as f:
-        if reference_file[-4:] == 'cell':
+        if reference_file[-5:] == '.cell':
             for ln in f:
                 if ' = ' not in ln:
                     continue
@@ -170,6 +170,8 @@ def cell_in_tolerance(probe_constants, reference_file, tolerance):
             for ln in f:
                 if ln[:6] == 'CRYST1':
                     reference_value = [float(x) for x in ln.split()[1:7]]
+        else:
+            warnings.warn(' Cell file is of unknown type')
     for i in range(6):
         if probe_constants[i] < (1 - tolerance) * reference_value[i]:
             return False
@@ -186,7 +188,7 @@ def get_crystal_frames(stream_file, cell_file, tolerance):
     hit_list = []
     cell_ensemble = []
 
-    if cell_file[-4:] == 'cell':
+    if cell_file[-5:] == '.cell':
         print(' check against CrystFEL unit-cell format:')
     elif cell_file[-4:] == '.pdb':
         print(' check against PDB/CRYST1 unit-cell format:')
@@ -231,7 +233,7 @@ def replace_cell(fn, const_values):
     """ Write a new cell file based on the provided one, containing the new
         constants as defined by fitting.
     """
-    if fn[-4:] == 'cell':
+    if fn[-5:] == '.cell':
         const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
         cell_dict = {}
         for i in range(6):
@@ -259,18 +261,27 @@ def replace_cell(fn, const_values):
                     geom = ' '.join(ln.split()[7:])
         with open(f'{fn}_refined', 'w') as f_out:
             new_cryst = 'CRYST1'
-            new_cryst += str([f'{v:9.3f}' for v in const_values[:3]])
-            new_cryst += str([f'{v:7.2f}' for v in const_values[3:6]])
+            new_cryst += ''.join([f'{v:9.3f}' for v in const_values[:3]])
+            new_cryst += ''.join([f'{v:7.2f}' for v in const_values[3:6]])
             new_cryst += f' {geom}'
             f_out.write(new_cryst)
+    else:
+        warnings.warn(' Cell file is of unknown type')
 
 
 def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
-    cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
-    cell_string = '{:20}'.format(cell_file) + \
-                  '  '.join([item[1] for item in cell_info]) + '\n'
+    if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
+        cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+        cell_string = '{:20}'.format(cell_file) + \
+                      '  '.join([item[1] for item in cell_info]) + '\n'
+    elif cell_file[-4:] == '.pdb ' or cell_file[-12:] == '.pdb_refined':
+        cell_info = open(cell_file).read().splitlines()[0].split()[1:]
+        cell_string = ' '.join(cell_info[6:]) + '   ' + '   '.join(cell_info[:6])
+    else:
+        warnings.warn(' Cell file is of unknown type')
+        cell_string = ''
     return cell_string
 
 
