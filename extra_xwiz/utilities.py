@@ -231,25 +231,38 @@ def replace_cell(fn, const_values):
     """ Write a new cell file based on the provided one, containing the new
         constants as defined by fitting.
     """
-    const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
-    cell_dict = {}
-    for i in range(6):
-        cell_dict[const_names[i]] = const_values[i]
-    lines = []
-    # read existing cell file
-    with open(fn, 'r') as f_in:
-        for ln in f_in:
-            lines.append(ln)
-    # write new cell file
-    with open(f'{fn}_refined', 'w') as f_out:
-        for ln in lines:
-            items = ln.split()
-            if len(items) >= 3 and items[0] in const_names:
-                items[2] = '{:.2f}'.format(cell_dict[items[0]])
-                new_ln = ' '.join(items)
-                f_out.write(new_ln + '\n')
-            else:
-                f_out.write(ln)
+    if fn[-4:] == 'cell':
+        const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
+        cell_dict = {}
+        for i in range(6):
+            cell_dict[const_names[i]] = const_values[i]
+        lines = []
+        # read existing cell file
+        with open(fn, 'r') as f_in:
+            for ln in f_in:
+                lines.append(ln)
+        # write new cell file
+        with open(f'{fn}_refined', 'w') as f_out:
+            for ln in lines:
+                items = ln.split()
+                if len(items) >= 3 and items[0] in const_names:
+                    items[2] = '{:.2f}'.format(cell_dict[items[0]])
+                    new_ln = ' '.join(items)
+                    f_out.write(new_ln + '\n')
+                else:
+                    f_out.write(ln)
+
+    elif fn[-4:] == '.pdb':
+        with open(fn, 'r') as f_in:
+            for ln in f_in:
+                if ln[:6] == 'CRYST1':
+                    geom = ' '.join(ln.split()[7:])
+        with open(f'{fn}_refined', 'w') as f_out:
+            new_cryst = 'CRYST1'
+            new_cryst += str([f'{v:9.3f}' for v in const_values[:3]])
+            new_cryst += str([f'{v:7.2f}' for v in const_values[3:6]])
+            new_cryst += f' {geom}'
+            f_out.write(new_cryst)
 
 
 def cell_as_string(cell_file):

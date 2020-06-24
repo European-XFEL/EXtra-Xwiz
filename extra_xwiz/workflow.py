@@ -198,7 +198,6 @@ class Workflow:
                                     'VDS_NAME': self.vds_name
                                     })
             subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
-            #os.system(f'/gpfs/exfel/sw/software/xfel_anaconda3/1.1/bin/extra-data-make-virtual-cxi {self.data_path} -o {self.vds_name}')
         else:
             print('Requested VDS is present already.')
         with h5py.File(self.vds_name, 'r') as f:
