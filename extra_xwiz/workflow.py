@@ -16,7 +16,7 @@ from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         scan_cheetah_proc_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
-                      report_reprocess)
+                      report_reprocess, report_config_echo, report_reconfig)
 
 
 class Workflow:
@@ -53,6 +53,8 @@ class Workflow:
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
         self.max_adu = conf['merging']['max_adu']
+        self.config = conf   # store the dictionary to report later
+        self.overrides = []  # collect optional config overrides (if interactive)
         self.hit_list = []
         self.cell_ensemble = []
         self.cell_info = []
@@ -519,5 +521,6 @@ def main(argv=None):
                         reprocess=args.reprocess,
                         use_cheetah=args.cheetah_input)
     workflow.manage()
+    report_config_echo(workflow.list_prefix, workflow.config)
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')

@@ -15,4 +15,3 @@ def load_from_file():
     conf = toml.load(conf_path)
     print('Configuration loaded.')
     return conf
-
