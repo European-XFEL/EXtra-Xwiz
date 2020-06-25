@@ -53,7 +53,7 @@ class Workflow:
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
         self.max_adu = conf['merging']['max_adu']
-        self.config = conf   # store the dictionary to report later
+        self.config = conf   # store the config dictionary to report later
         self.overrides = []  # collect optional config overrides (if interactive)
         self.hit_list = []
         self.cell_ensemble = []
@@ -76,6 +76,7 @@ class Workflow:
             if _peak_method != '':
                 if _peak_method in ['peakfinder8', 'zaef']:
                     self.peak_method = _peak_method
+                    self.overrides.append({'peak_method': self.peak_method})
                 else:
                     warnings.warn('Peak-finding method not known; default kept.')
 
@@ -83,6 +84,7 @@ class Workflow:
             if _peak_threshold != '':
                 try:
                     self.peak_threshold = int(_peak_threshold)
+                    self.overrides.append({'peak_threshold': self.peak_threshold})
                 except TypeError:
                     warnings.warn('Wrong type; kept at default')
 
@@ -90,6 +92,7 @@ class Workflow:
             if _peak_snr != '':
                 try:
                     self.peak_snr = int(_peak_snr)
+                    self.overrides.append({'peak_snr': self.peak_snr})
                 except TypeError:
                     warnings.warn('Wrong type; kept at default')
 
@@ -97,6 +100,7 @@ class Workflow:
             if _peak_min_px != '':
                 try:
                     self.peak_min_px = int(_peak_min_px)
+                    self.overrides.append({'peak_min_px': self.peak_min_px})
                 except TypeError:
                     warnings.warn('Wrong type; kept at default')
 
@@ -104,6 +108,7 @@ class Workflow:
             if _index_method != '':
                 if _index_method in ['mosflm', 'xds', 'xgandalf']:
                     self.index_method = _index_method
+                    self.overrides.append({'index_method': self.index_method})
                 else:
                     warnings.warn('Indexing method not known; default kept.')
 
