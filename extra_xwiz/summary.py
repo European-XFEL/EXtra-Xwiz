@@ -91,13 +91,13 @@ def report_reprocess(prefix):
 
 
 def report_config_echo(prefix, conf):
-    """Report the initial workflow configuration"""
+    """Report the initial workflow configuration completely"""
     with open(f'{prefix}.summary', 'a') as f:
         f.write('\nBASE CONFIGURATION USED\n')
-        for group_key, group_dict in conf:
-            f.write(f' Group: {group_key}')
-            for param_key, param_value in group_dict:
-                f.write(f'{param_key:12} {param_value}')
+        for group_key, group_dict in conf.items():
+            f.write(f' Group: {group_key}\n')
+            for param_key, param_value in group_dict.items():
+                f.write(f'   {param_key:12}: {param_value}\n')
 
 
 def report_reconfig(prefix, param_key, param_value):
