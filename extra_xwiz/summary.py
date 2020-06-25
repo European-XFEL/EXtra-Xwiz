@@ -91,7 +91,8 @@ def report_reprocess(prefix):
 
 
 def report_config_echo(prefix, conf):
-    """Report the initial workflow configuration completely"""
+    """Report the initial workflow configuration completely
+    """
     with open(f'{prefix}.summary', 'a') as f:
         f.write('\nBASE CONFIGURATION USED\n')
         for group_key, group_dict in conf.items():
@@ -100,5 +101,10 @@ def report_config_echo(prefix, conf):
                 f.write(f'   {param_key:12}: {param_value}\n')
 
 
-def report_reconfig(prefix, param_key, param_value):
-    pass
+def report_reconfig(prefix, overrides):
+    """List all instances where the config-file parameters were overridden
+    """
+    with open(f'{prefix}.summary', 'a') as f:
+        f.write('\nINTERACTIVE PARAMETER OVERRIDES\n')
+        for param_key, param_value in overrides.items():
+            f.write(f'   {param_key:18}: {param_value}\n')
