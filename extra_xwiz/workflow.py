@@ -17,14 +17,16 @@ from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         scan_cheetah_proc_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
-                      report_reprocess, report_config_echo, report_reconfig)
+                      report_reprocess, report_reconfig)
 
 
 class Workflow:
 
     def __init__(self, home_dir, work_dir, automatic=False, reprocess=False,
                  use_cheetah=False):
-
+        """Construct a workflow instance from the pre-defined configuration.
+           Initialize some class-global 'bookkeeping' variables
+        """
         self.home_dir = home_dir
         self.work_dir = work_dir
         self.interactive = not automatic
@@ -64,7 +66,9 @@ class Workflow:
         self.step = 0
 
     def crystfel_from_config(self, high_res=2.0):
-
+        """ Inquire the CrystFEL-relevant workflow parameters (provided we are
+            in interactive mode)
+        """
         cell_keyword = ''
 
         if self.interactive:
@@ -138,7 +142,7 @@ class Workflow:
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         duration = self.duration_hits if filtered else self.duration_all
-        with open(f'{prefix}_proc-0.sh', 'w') as f:
+        with open(f'{prefix}_proc-{self.step}.sh', 'w') as f:
             f.write(PROC_BASH_SLURM % {'PREFIX': prefix,
                                        'GEOM': self.geometry,
                                        'CRYSTAL': cell_keyword,
@@ -154,12 +158,14 @@ class Workflow:
                       f'--partition={self.partition}',
                       f'--time={duration}',
                       f'--array=0-{n_nodes-1}',
-                      f'./{prefix}_proc-0.sh']
+                      f'./{prefix}_proc-{self.step}.sh']
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]    # job id
 
     def process_slurm_single(self, high_res, cell_keyword):
-
+        """ Issue a formal sbatch submission but without array i. e. for a
+            single process
+        """
         if self.interactive:
             _int_radii = input('Integration radii around predicted Bragg-peak'
                                f'positions [{self.integration_radii}] > ')
@@ -191,6 +197,9 @@ class Workflow:
         return proc_out.decode('utf-8').split()[-1]  # job id
 
     def wrap_process(self, res_limit, cell_keyword, filtered=False):
+        """ Perform the processing as distributed computation job;
+            when finished combine the output and remove temporary files
+        """
         self.step += 1
         report_reconfig(self.list_prefix, self.overrides)
         n_frames = len(self.hit_list) if filtered else self.n_frames
@@ -211,6 +220,9 @@ class Workflow:
         self.clean_up(job_id, filtered)
 
     def make_virtual(self):
+        """ Make reference to original data in run folder, provide VDS for
+            usage with indexamajig (CXI compliant format)
+        """
         print('\n-----   TASK: create virtual data set   -----')
         if self.interactive:
             _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
@@ -230,7 +242,9 @@ class Workflow:
         print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
 
     def prep_distribute(self):
-
+        """ Inquire enumerator and denominator of the frame distribution onto
+            chunks: total number (in case truncated) and number of jobs/nodes
+        """
         print('\n-----   TASK: prepare distributed computing   -----')
         if self.interactive:
             _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
@@ -323,7 +337,8 @@ class Workflow:
                 f_out.write(ln)
 
     def clean_up(self, job_id, filtered=False):
-        """ Remove files that that were meant temporary as per splitting """
+        """ Remove files that are meant to be temporary as per splitting
+        """
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
         input_lists = glob(f'{prefix}_*.lst')
         stream_out = glob(f'{prefix}_*.stream')
@@ -414,17 +429,14 @@ class Workflow:
         report_merging_metrics(self.list_prefix)
 
     def process_late(self):
-
+        """ Last pass of the workflow:
+            re-indexing, integration and scaling/merging
+        """
         print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------')
-        self.step += 1
         self.distribute_hits()
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_higher)
         self.wrap_process(res_limit, cell_keyword, filtered=True)
-        # job_id = self.process_slurm_single(res_limit, cell_keyword)
-        # wait_single(job_id, len(self.hit_list))
-        report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
-                         self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
         report_cells(self.list_prefix, self.cell_info)
 
@@ -454,7 +466,8 @@ class Workflow:
         self.merge_bragg_obs()
 
     def check_late_entrance(self):
-
+        """ Verify the presence of mandatory files from a previous session
+        """
         if self.interactive:
             _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
             if _list_prefix != '':
@@ -478,6 +491,10 @@ class Workflow:
         self.hit_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
 
     def manage(self):
+        """ Parent workflow structure implementation
+        """
+        create_new_summary(self.list_prefix, self.config, self.interactive,
+                           self.use_cheetah)
 
         if self.reprocess:
             self.check_late_entrance()
@@ -509,7 +526,6 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-        create_new_summary(self.list_prefix, self.geometry)
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
@@ -569,6 +585,5 @@ def main(argv=None):
                         reprocess=args.reprocess,
                         use_cheetah=args.cheetah_input)
     workflow.manage()
-    report_config_echo(workflow.list_prefix, workflow.config)
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')

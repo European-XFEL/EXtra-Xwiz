@@ -1,11 +1,27 @@
+from datetime import datetime
 import os
 import re
 
 
-def create_new_summary(prefix, geom):
+def create_new_summary(prefix, conf, is_interactive, use_cheetah):
+    """ Initiate a new summary file including timestamp.
+        Report the complete initial workflow configuration
+    """
+    time_stamp = datetime.now().isoformat()
+    mode = ['automatic (batch run from configuration file)',
+            'interactive (run-time parameter confirm/override)'][is_interactive]
+    input_type = ['virtual data set referring to EuXFEL-corrected HDF5',
+                  'HDF5 pre-processed with Cheetah'][use_cheetah]
     with open(f'{prefix}.summary', 'w') as f:
         f.write('SUMMARY OF XWIZ WORKFLOW\n\n')
-        f.write(f'Geometry file used: {geom}\n\n')
+        f.write(f'Session time-stamp: {time_stamp}\n')
+        f.write(f'Operation mode:\n  {mode}\n')
+        f.write(f'Input type:\n  {input_type}\n')
+        f.write('\nBASE CONFIGURATION USED\n')
+        for group_key, group_dict in conf.items():
+            f.write(f' Group: {group_key}\n')
+            for param_key, param_value in group_dict.items():
+                f.write(f'   {param_key:12}: {param_value}\n')
 
 
 def report_step_rate(prefix, stream_file, step, res_limit):
@@ -87,23 +103,14 @@ def report_reprocess(prefix):
     """Report start of a reprocessing step
     """
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('\n###   Reprocessing   ####\n')
-
-
-def report_config_echo(prefix, conf):
-    """Report the initial workflow configuration completely
-    """
-    with open(f'{prefix}.summary', 'a') as f:
-        f.write('\nBASE CONFIGURATION USED\n')
-        for group_key, group_dict in conf.items():
-            f.write(f' Group: {group_key}\n')
-            for param_key, param_value in group_dict.items():
-                f.write(f'   {param_key:12}: {param_value}\n')
+        f.write('\n####   Reprocessing   ####\n')
 
 
 def report_reconfig(prefix, overrides):
     """List all instances where the config-file parameters were overridden
     """
+    if len(overrides) == 0:
+        return
     with open(f'{prefix}.summary', 'a') as f:
         f.write('\nINTERACTIVE PARAMETER OVERRIDES\n')
         for param_key, param_value in overrides.items():
