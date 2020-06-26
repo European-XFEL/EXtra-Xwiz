@@ -15,8 +15,10 @@ geometry = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028/agipd_2450_vds_v4.geo
 
 [slurm]
 partition = "exfel"
-duration = "2:00:00"
-n_nodes = 10
+duration_all = "2:00:00"
+n_nodes_all = 10
+duration_hits = "0:30:00"
+n_nodes_hits = 4
 
 [proc_coarse]
 resolution = 4.0

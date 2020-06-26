@@ -6,7 +6,6 @@ def create_new_summary(prefix, geom):
     with open(f'{prefix}.summary', 'w') as f:
         f.write('SUMMARY OF XWIZ WORKFLOW\n\n')
         f.write(f'Geometry file used: {geom}\n\n')
-        f.write('Step #   d_lim   source      N(crystals)    N(frames)    Indexing rate [%%]\n')
 
 
 def report_step_rate(prefix, stream_file, step, res_limit):
@@ -20,6 +19,7 @@ def report_step_rate(prefix, stream_file, step, res_limit):
                              re.DOTALL)
     indexing_rate = 100.0 * len(cryst_occur) / len(frame_occur)
     with open(f'{prefix}.summary', 'a') as f:
+        f.write('Step #   d_lim   source      N(crystals)    N(frames)    Indexing rate [%%]\n')
         f.write(' {:2d}        {:3.1f}   indexamajig   {:7d}     {:7d}         {:5.2f}\n'.format(step,
                 res_limit, len(cryst_occur), len(frame_occur), indexing_rate))
 

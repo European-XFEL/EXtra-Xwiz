@@ -37,9 +37,11 @@ class Workflow:
         self.geometry = conf['data']['geometry']
         self.n_frames = conf['data']['n_frames']
         self.list_prefix = conf['data']['list_prefix']
-        self.n_nodes = conf['slurm']['n_nodes']
+        self.n_nodes_all = conf['slurm']['n_nodes_all']
+        self.n_nodes_hits = conf['slurm']['n_nodes_hits']
         self.partition = conf['slurm']['partition']
-        self.duration = conf['slurm']['duration']
+        self.duration_all = conf['slurm']['duration_all']
+        self.duration_hits = conf['slurm']['duration_hits']
         self.res_lower = conf['proc_coarse']['resolution']
         self.res_higher = conf['proc_fine']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
@@ -129,10 +131,15 @@ class Workflow:
 
         return high_res, cell_keyword
 
-    def process_slurm_multi(self, high_res, cell_keyword):
-
-        with open(f'{self.list_prefix}_proc-0.sh', 'w') as f:
-            f.write(PROC_BASH_SLURM % {'PREFIX': self.list_prefix,
+    def process_slurm_multi(self, high_res, cell_keyword, filtered=False):
+        """ Write a batch-script wrapper for indexamajig from the relevant
+            configuration parameters and start a process by sbatch submission
+        """
+        prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
+        n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
+        duration = self.duration_hits if filtered else self.duration_all
+        with open(f'{prefix}_proc-0.sh', 'w') as f:
+            f.write(PROC_BASH_SLURM % {'PREFIX': prefix,
                                        'GEOM': self.geometry,
                                        'CRYSTAL': cell_keyword,
                                        'CORES': 40,
@@ -145,9 +152,9 @@ class Workflow:
                                        })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
-                      f'--time={self.duration}',
-                      f'--array=0-{self.n_nodes-1}',
-                      f'./{self.list_prefix}_proc-0.sh']
+                      f'--time={duration}',
+                      f'--array=0-{n_nodes-1}',
+                      f'./{prefix}_proc-0.sh']
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]    # job id
 
@@ -183,17 +190,25 @@ class Workflow:
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]  # job id
 
-    def wrap_process(self):
+    def wrap_process(self, res_limit, cell_keyword, filtered=False):
         self.step += 1
-        res_limit, cell_keyword = \
-            self.crystfel_from_config(high_res=self.res_lower)
         report_reconfig(self.list_prefix, self.overrides)
-        job_id = self.process_slurm_multi(res_limit, cell_keyword)
-        wait_or_cancel(job_id, self.n_nodes, self.n_frames, self.duration)
-        self.concat()
-        report_step_rate(self.list_prefix, f'{self.list_prefix}.stream',
-                         self.step, res_limit)
-        self.clean_up(job_id)
+        n_frames = len(self.hit_list) if filtered else self.n_frames
+        n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
+        job_duration = self.duration_hits if filtered else self.duration_all
+        if self.interactive:
+            _duration = input(f'SLURM allocation time [{job_duration}] > ')
+            if _duration != '':
+                job_duration = _duration
+        job_id = self.process_slurm_multi(res_limit, cell_keyword,
+                                          filtered=filtered)
+        wait_or_cancel(job_id, n_nodes, n_frames, job_duration)
+        self.concat(filtered)
+        stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
+            else f'{self.list_prefix}.stream'
+        report_step_rate(self.list_prefix, stream_file_name, self.step,
+                         res_limit)
+        self.clean_up(job_id, filtered)
 
     def make_virtual(self):
         print('\n-----   TASK: create virtual data set   -----')
@@ -201,7 +216,8 @@ class Workflow:
             _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
             if _vds_name != '':
                 self.vds_name = _vds_name
-        if not ( os.path.exists(f'{self.work_dir}/{self.vds_name}') or os.path.exists(f'{self.vds_name}') ):
+        if not (os.path.exists(f'{self.work_dir}/{self.vds_name}')
+                or os.path.exists(f'{self.vds_name}')):
             with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
                 f.write(MAKE_VDS % {'DATA_PATH': self.data_path,
                                     'VDS_NAME': self.vds_name
@@ -223,10 +239,10 @@ class Workflow:
                     self.n_frames = int(_n_frames)
                 except TypeError:
                     warnings.warn('Wrong type; kept at default.')
-            _n_nodes = input(f'Number of nodes [{self.n_nodes}] > ')
+            _n_nodes = input(f'Number of nodes [{self.n_nodes_all}] > ')
             if _n_nodes != '':
                 try:
-                    self.n_nodes = int(_n_nodes)
+                    self.n_nodes_all = int(_n_nodes)
                 except TypeError:
                     warnings.warn('Wrong type; kept at default.')
             _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
@@ -234,13 +250,16 @@ class Workflow:
                 self.list_prefix = _list_prefix
 
     def distribute_vds(self):
-
+        """ Distribute the consecutive frames as in the VDS, accounting for
+            the number to be processed, onto N chunks, and write into N
+            temporary .lst files
+        """
         self.prep_distribute()
         if self.n_frames > self.exp_ids.shape[0]:
             warnings.warn('Requested number of frames too large, reset to'
                           f' total frame number of {self.exp_ids.shape[0]}.')
             self.n_frames = self.exp_ids.shape[0]
-        sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes)
+        sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes_all)
         for chunk, indices in enumerate(sub_indices):
             print(len(indices), end=' ')
             with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
@@ -249,6 +268,10 @@ class Workflow:
         print()
 
     def distribute_cheetah(self):
+        """ Distribute the number of Cheetah HDF5 files, accounting for the
+            amount of frames to be processed, onto N chunks, and write the
+            file paths into N temporary .lst files
+        """
         print('\n-----   TASK: analyse and distribute Cheetah input   -----')
         n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
         print('total number of processed files:   {:5d}'.format(n_files))
@@ -270,24 +293,48 @@ class Workflow:
                     f.write(f'{file_items[index]}\n')
         print()
 
-    def concat(self):
+    def distribute_hits(self):
+        """ Split up the list of indexed frames (also stored to one file) onto
+            N chunks and write N temporary .lst files
+        """
+        _n_nodes = input(f'Number of nodes [{self.n_nodes_hits}] > ')
+        if _n_nodes != '':
+            try:
+                self.n_nodes_hits = int(_n_nodes)
+            except TypeError:
+                warnings.warn('Wrong type; kept at default.')
+        n_filtered = len(self.hit_list)
+        sub_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
+        for chunk, indices in enumerate(sub_indices):
+            print(len(indices), end=' ')
+            with open(f'{self.list_prefix}_hits_{chunk}.lst', 'w') as f:
+                for index in indices:
+                    f.write(f'{self.hit_list[index]}\n')
+        print()
 
-        chunks = sorted(glob(f'{self.list_prefix}_*.stream'))
-        with open(f'{self.list_prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
+    def concat(self, filtered=False):
+        """ Concatenate CrystFEL stream files obtained from split-processing
+        """
+        # in case account for the fact the prefix_* covers prefix_hits_*
+        prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
+        chunks = sorted(glob(f'{prefix}_*.stream'))
+        with open(f'{prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
             for ln in f_in:
                 f_out.write(ln)
 
-    def clean_up(self, job_id):
-
-        input_lists = glob(f'{self.list_prefix}_*.lst')
-        stream_out = glob(f'{self.list_prefix}_*.stream')
+    def clean_up(self, job_id, filtered=False):
+        """ Remove files that that were meant temporary as per splitting """
+        prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
+        input_lists = glob(f'{prefix}_*.lst')
+        stream_out = glob(f'{prefix}_*.stream')
         slurm_out = glob(f'slurm-{job_id}_*.out')
         file_items = input_lists + stream_out + slurm_out
         for item in file_items:
             os.remove(item)
 
     def write_hit_list(self):
-
+        """Write the total set of indexed frames into one 'hit list' file
+        """
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
             for hit_event in self.hit_list:
@@ -368,11 +415,14 @@ class Workflow:
 
     def process_late(self):
 
-        print('\n-----   TASK: run final CrystFEL with refined cell ------')
+        print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------')
         self.step += 1
-        res_limit, cell_keyword = self.crystfel_from_config(high_res=self.res_higher)
-        job_id = self.process_slurm_single(res_limit, cell_keyword)
-        wait_single(job_id, len(self.hit_list))
+        self.distribute_hits()
+        res_limit, cell_keyword = \
+            self.crystfel_from_config(high_res=self.res_higher)
+        self.wrap_process(res_limit, cell_keyword, filtered=True)
+        # job_id = self.process_slurm_single(res_limit, cell_keyword)
+        # wait_single(job_id, len(self.hit_list))
         report_step_rate(self.list_prefix, f'{self.list_prefix}_hits.stream',
                          self.step, res_limit)
         report_total_rate(self.list_prefix, self.n_frames)
@@ -459,27 +509,18 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-
-            _partition = input(f'SLURM partition [{self.partition}] > ')
-            if _partition != '':
-                if _partition in ['exfel', 'upex']:
-                    self.partition = _partition
-                else:
-                    warnings.warn('Partition not known; kept at default.')
-
-            _duration = input(f'SLURM allocation time [{self.duration}] > ')
-            if _duration != '':
-                self.duration = _duration
-
         create_new_summary(self.list_prefix, self.geometry)
-        self.wrap_process()
+
+        res_limit, cell_keyword = \
+            self.crystfel_from_config(high_res=self.res_lower)
+        self.wrap_process(res_limit, cell_keyword, filtered=False)
 
         if self.cell_file == 'none':
             print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
             self.distribute()
-            self.wrap_process()
+            self.wrap_process(filtered=False)
 
         print('\n-----   TASK: check crystal frames and refine unit cell -----')
         if self.interactive:
