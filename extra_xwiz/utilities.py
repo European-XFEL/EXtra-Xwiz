@@ -10,6 +10,20 @@ import os, re, time
 import warnings
 
 
+def hex_to_int(hex_str):
+    """ Convert to base10 integer (decimal number) from explicit hexadecimal
+        input assumption. Will work whether or not string starts with '0x'
+    """
+    try:
+        dec_int = int(hex_str, 16)
+    except ValueError:
+        warnings.warn(' Illegal string given - cannot be interpreted'
+                      ' as hex number. Set to 0xffffffff')
+        dec_int = int('ffffffff', 16)  # default for make-virtual-cxi
+    print(f' fill-value: {hex_str} = {dec_int}')
+    return dec_int
+
+
 def estimate_moments(sample):
     """ Calculate the 'naive' height, mean and stddev of a sample,
         to serve as starting values (estimates) for a Gauss fit.

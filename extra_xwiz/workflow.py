@@ -14,7 +14,7 @@ from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         POINT_GROUPS, MAKE_VDS)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string,
-                        scan_cheetah_proc_dir)
+                        scan_cheetah_proc_dir, hex_to_int)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
@@ -237,10 +237,11 @@ class Workflow:
                 _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
                 if _vds_mask != '':
                     self.vds_mask = _vds_mask
+            vds_mask_int = hex_to_int(self.vds_mask)
             with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
                 f.write(MAKE_VDS % {'DATA_PATH': self.data_path,
                                     'VDS_NAME': self.vds_name,
-                                    'MASK_BAD': self.vds_mask
+                                    'MASK_BAD': vds_mask_int
                                     })
             subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
         else:
