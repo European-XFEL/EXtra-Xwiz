@@ -7,15 +7,19 @@ POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
 
 CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028"
-n_frames = 200000
-vds_name = "xmpl_28_vds.cxi"
-list_prefix = "xmpl_28_frames"
-geometry = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0028/agipd_2450_vds_v4.geom"
+path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030"
+n_frames = 100000
+vds_name = "xmpl_30_vds.cxi"
+vds_mask_bad = "0xffff"
+list_prefix = "xmpl_30"
+
+[geom]
+file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
+template_path = "./agipd_mar18_v11.geom"
 
 [slurm]
 partition = "exfel"
-duration_all = "2:00:00"
+duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
 n_nodes_hits = 4
@@ -53,7 +57,9 @@ module load exfel_anaconda3/1.1
 
 extra-data-make-virtual-cxi \\
   %(DATA_PATH)s \\
-  -o %(VDS_NAME)s 
+  -o %(VDS_NAME)s \\
+  --fill-value data 0.0 \\
+  --fill-value mask %(MASK_BAD)s
 """
 
 PROC_BASH_SLURM = """\

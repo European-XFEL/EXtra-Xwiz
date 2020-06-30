@@ -36,9 +36,11 @@ class Workflow:
         conf = config.load_from_file()
         self.data_path = conf['data']['path']
         self.vds_name = conf['data']['vds_name']
-        self.geometry = conf['data']['geometry']
+        self.vds_mask = conf['data']['vds_mask_bad']
         self.n_frames = conf['data']['n_frames']
         self.list_prefix = conf['data']['list_prefix']
+        self.geometry = conf['geom']['file_path']
+        self.geom_template = conf['geom']['template_path']
         self.n_nodes_all = conf['slurm']['n_nodes_all']
         self.n_nodes_hits = conf['slurm']['n_nodes_hits']
         self.partition = conf['slurm']['partition']
@@ -230,9 +232,15 @@ class Workflow:
                 self.vds_name = _vds_name
         if not (os.path.exists(f'{self.work_dir}/{self.vds_name}')
                 or os.path.exists(f'{self.vds_name}')):
+            print('Creating a VDS file in CXI format')
+            if self.interactive:
+                _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
+                if _vds_mask != '':
+                    self.vds_mask = _vds_mask
             with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
                 f.write(MAKE_VDS % {'DATA_PATH': self.data_path,
-                                    'VDS_NAME': self.vds_name
+                                    'VDS_NAME': self.vds_name,
+                                    'MASK_BAD': self.vds_mask
                                     })
             subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
         else:
@@ -240,6 +248,12 @@ class Workflow:
         with h5py.File(self.vds_name, 'r') as f:
             self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
         print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
+
+    def check_geom_format(self):
+        """ Verify that the provided geometry file is VDS/CXI compatible.
+            If it is not, transfer its contents onto a valid template
+        """
+        pass
 
     def prep_distribute(self):
         """ Inquire enumerator and denominator of the frame distribution onto
@@ -526,6 +540,7 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
+        self.check_geom_format()
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
