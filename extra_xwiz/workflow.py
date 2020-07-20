@@ -12,6 +12,9 @@ from . import config
 from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
                         CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
                         POINT_GROUPS, MAKE_VDS)
+from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
+                       get_panel_positions, get_panel_vectors,
+                       get_panel_offsets)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string,
                         scan_cheetah_proc_dir, hex_to_int)
@@ -254,7 +257,69 @@ class Workflow:
         """ Verify that the provided geometry file is VDS/CXI compatible.
             If it is not, transfer its contents onto a valid template
         """
-        pass
+        with open(self.geometry, 'r') as f:
+            for ln in f:
+                if 'max_ss' in ln and not 'bad' in ln and int(ln.split()[-1]) > 511:
+                    print('Geometry file is not compatible to EuXFEL-VDS')
+                    return False
+        print('Geometry file is format-compatible to EuXFEL-VDS')
+        return True
+
+    def transfer_geometry(self):
+        """ Transfer corner x/y positions and fs/ss vectors onto a geometry
+            file template VDS/CXI format  
+        """
+        if self.interactive:
+            _geom_template = \
+                input(f'Path to geometry template [{self.geom_template}] > ')
+            if _geom_template != '':
+                if os.path.exists(_geom_template):
+                    self.geom_template = _geom_template
+                else:
+                    warnings.warn(
+                        'Cannot find file at designated path, default kept.')
+
+        target_distance = get_detector_distance(self.geometry)
+        target_photon_energy = get_photon_energy(self.geometry)
+        target_bad_pixel = get_bad_pixel(self.geometry)
+        target_panel_corners = get_panel_positions(self.geometry)
+        target_panel_vectors = get_panel_vectors(self.geometry)
+        target_panel_offsets = get_panel_offsets(self.geometry)
+        out_fn = self.geometry + '_tf.geom'
+        with open(out_fn, 'w') as of:
+            of.write('; Geometry file written by EXtra-xwiz\n')
+            of.write('; Geometry used: {}\n'.format(self.geometry))
+            of.write('; Format template used: {}\n'.format(self.geom_template))
+            with open(self.geom_template, 'r') as tf:
+                for ln in tf:
+                    if ln[:41] == '; Optimized panel offsets can be found at':
+                        continue
+                    if ln[:6] == 'clen =':
+                        of.write('clen = {}\n'.format(target_distance))
+                    elif ln[:15] == 'photon_energy =':
+                        of.write('photon_energy = {}\n'.format(
+                                                        target_photon_energy))
+                    elif ln[:10] == 'mask_bad =':
+                        of.write('mask_bad = {}\n'.format(target_bad_pixel))
+                    elif ln[0] == 'p' and ('/corner_x =' in ln
+                                           or '/corner_y =' in ln):
+                        tile_id = ln.split()[0]
+                        of.write(
+                            '{} = {}\n'.format(tile_id,
+                                               target_panel_corners[tile_id]))
+                    elif ln[0] == 'p' and ('/fs =' in ln or '/ss =' in ln):
+                        tile_id = ln.split()[0]
+                        of.write(
+                            '{} = {}\n'.format(tile_id,
+                                               target_panel_vectors[tile_id]))
+                    elif ln[0] == 'p' and '/coffset =' in ln:
+                        tile_id = ln.split()[0]
+                        of.write(
+                            '{} = {}\n'.format(tile_id,
+                                               target_panel_offsets[tile_id]))
+                    else:
+                       of.write(ln)
+        self.geometry = out_fn
 
     def prep_distribute(self):
         """ Inquire enumerator and denominator of the frame distribution onto
@@ -534,14 +599,16 @@ class Workflow:
 
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
-            _geometry = input(f'VDS-compatible geometry file [{self.geometry}] > ')
+            _geometry = input(f'Path to geometry file [{self.geometry}] > ')
             if _geometry != '':
                 if os.path.exists(_geometry):
                     self.geometry = _geometry
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-        self.check_geom_format()
+        if self.check_geom_format() == False:
+            self.transfer_geometry()
+            print(f' Geometry transfered to new file "{self.geometry}".')
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
