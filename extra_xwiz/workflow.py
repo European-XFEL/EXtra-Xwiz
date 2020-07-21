@@ -35,10 +35,15 @@ class Workflow:
         self.interactive = not automatic
         self.reprocess = reprocess
         self.use_cheetah = use_cheetah
-        self.exp_ids = np.array([])
+        self.exp_ids = []
         conf = config.load_from_file()
-        self.data_path = conf['data']['path']
-        self.vds_name = conf['data']['vds_name']
+        data_path = conf['data']['path']
+        run_numbers = [int(n) for n in conf['data']['runs'].split(',')]
+        self.data_runs = [f'{data_path}r{run:04d}' for run in run_numbers]
+        self.vds_names = conf['data']['vds_names'].split(',')
+        if not len(self.vds_names) == len(self.data_runs):
+            print('CONFIG ERROR: unequal numbers of VDS files run-paths')
+            exit(0)
         self.vds_mask = conf['data']['vds_mask_bad']
         self.n_frames = conf['data']['n_frames']
         self.list_prefix = conf['data']['list_prefix']
@@ -225,33 +230,44 @@ class Workflow:
         self.clean_up(job_id, filtered)
 
     def make_virtual(self):
-        """ Make reference to original data in run folder, provide VDS for
+        """ Make reference to original data in run folders, provide VDS for
             usage with indexamajig (CXI compliant format)
         """
-        print('\n-----   TASK: create virtual data set   -----')
+        print('\n-----   TASK: check/create virtual data sets   -----')
         if self.interactive:
-            _vds_name = input(f'Virtual data set name [{self.vds_name}] > ')
-            if _vds_name != '':
-                self.vds_name = _vds_name
-        if not (os.path.exists(f'{self.work_dir}/{self.vds_name}')
-                or os.path.exists(f'{self.vds_name}')):
-            print('Creating a VDS file in CXI format')
+            _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
+            if _vds_mask != '':
+                self.vds_mask = _vds_mask
+        vds_mask_int = hex_to_int(self.vds_mask)
+
+        for i, vds_name in enumerate(self.vds_names):
             if self.interactive:
-                _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
-                if _vds_mask != '':
-                    self.vds_mask = _vds_mask
-            vds_mask_int = hex_to_int(self.vds_mask)
-            with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
-                f.write(MAKE_VDS % {'DATA_PATH': self.data_path,
-                                    'VDS_NAME': self.vds_name,
-                                    'MASK_BAD': vds_mask_int
-                                    })
-            subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
-        else:
-            print('Requested VDS is present already.')
-        with h5py.File(self.vds_name, 'r') as f:
-            self.exp_ids = np.array(f['entry_1/experiment_identifier'][()])
-        print(f'Data set contains {self.exp_ids.shape[0]} frames in total.')
+                _vds_name = input(f'Virtual data set name [{vds_name}] > ')
+                if _vds_name != '':
+                    self.vds_names[i] = _vds_name
+            if not (os.path.exists(f'{self.work_dir}/{vds_name}')
+                    or os.path.exists(f'{vds_name}')):
+                print('Creating a VDS file in CXI format')
+                if self.interactive:
+                    _data_path = input(f'Data path [{self.data_runs[i]}] > ')
+                    if _data_path != '':
+                        if os.path.exists(_data_path):
+                            print(' [path check o.k.]')
+                            self.data_runs[i] = _data_path
+                        else:
+                            print(' [path not found - config kept]')
+
+                with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
+                    f.write(MAKE_VDS % {'DATA_PATH': self.data_runs[i],
+                                        'VDS_NAME': vds_name,
+                                        'MASK_BAD': vds_mask_int
+                                        })
+                subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
+            else:
+                print(f'Requested VDS {vds_name} is present already.')
+            with h5py.File(vds_name, 'r') as f:
+                self.exp_ids.append(np.array(f['entry_1/experiment_identifier'][()]))
+            print(f'Data set {i} contains {self.exp_ids[i].shape[0]} frames in total.')
 
     def check_geom_format(self):
         """ Verify that the provided geometry file is VDS/CXI compatible.
@@ -349,17 +365,29 @@ class Workflow:
             temporary .lst files
         """
         self.prep_distribute()
-        if self.n_frames > self.exp_ids.shape[0]:
+        n_frames_total = sum([self.exp_ids[i].shape[0] for i in range(len(self.data_runs))])
+        print('Total number of frames in all runs:', n_frames_total)
+        if self.n_frames > n_frames_total:
             warnings.warn('Requested number of frames too large, reset to'
-                          f' total frame number of {self.exp_ids.shape[0]}.')
-            self.n_frames = self.exp_ids.shape[0]
-        sub_indices = np.array_split(np.arange(self.n_frames), self.n_nodes_all)
-        for chunk, indices in enumerate(sub_indices):
-            print(len(indices), end=' ')
-            with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
-                for index in indices:
-                    f.write(f'{self.vds_name} //{index}\n')
-        print()
+                          f' total frame number of {n_frames_total}.')
+            self.n_frames = n_frames_total
+        if self.n_nodes_all % len(self.vds_names) != 0:
+            self.n_nodes_all = \
+                int(round(self.n_nodes_all / len(self.vds_names))) \
+                * len(self.vds_names)
+            warnings.warn('Requested number of nodes was not an integer'
+            f' multiple of runs/VDS files;\n set to: {self.n_nodes_all}')
+        for i, vds_name in enumerate(self.vds_names):
+            split_indices = np.array_split(
+                np.arange(self.n_frames / len(self.vds_names), dtype=int),
+                (self.n_nodes_all / len(self.vds_names)))
+            for j, sub_indices in enumerate(split_indices):
+                chunk = i * len(split_indices) + j
+                print(len(sub_indices), end=' ')
+                with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
+                    for index in sub_indices:
+                        f.write(f'{vds_name} //{index}\n')
+            print()
 
     def distribute_cheetah(self):
         """ Distribute the number of Cheetah HDF5 files, accounting for the
@@ -398,11 +426,11 @@ class Workflow:
             except TypeError:
                 warnings.warn('Wrong type; kept at default.')
         n_filtered = len(self.hit_list)
-        sub_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
-        for chunk, indices in enumerate(sub_indices):
-            print(len(indices), end=' ')
+        split_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
+        for chunk, sub_indices in enumerate(split_indices):
+            print(len(sub_indices), end=' ')
             with open(f'{self.list_prefix}_hits_{chunk}.lst', 'w') as f:
-                for index in indices:
+                for index in sub_indices:
                     f.write(f'{self.hit_list[index]}\n')
         print()
 
@@ -581,15 +609,6 @@ class Workflow:
             report_reprocess(self.list_prefix)
             self.process_late()
             return
-
-        if self.interactive:
-            _data_path = input(f'Data path [{self.data_path}] > ')
-            if _data_path != '':
-                if os.path.exists(_data_path):
-                    print(' [check o.k.]')
-                    self.data_path = _data_path
-                else:
-                    print(' [file not found - config kept]')
 
         if self.use_cheetah:
             self.distribute_cheetah()

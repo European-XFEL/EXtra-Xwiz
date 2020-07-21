@@ -7,9 +7,10 @@ POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
 
 CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030"
+path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
+runs = "30"
 n_frames = 100000
-vds_name = "xmpl_30_vds.cxi"
+vds_names = "xmpl_30_vds.cxi"
 vds_mask_bad = "0xffff"
 list_prefix = "xmpl_30"
 
