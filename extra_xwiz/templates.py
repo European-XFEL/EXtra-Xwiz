@@ -10,6 +10,7 @@ CONFIG = """\
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
 runs = "30"
 n_frames = 100000
+frame_offset = 0
 vds_names = "xmpl_30_vds.cxi"
 vds_mask_bad = "0xffff"
 list_prefix = "xmpl_30"

@@ -46,6 +46,7 @@ class Workflow:
             exit(0)
         self.vds_mask = conf['data']['vds_mask_bad']
         self.n_frames = conf['data']['n_frames']
+        self.frame_offset = conf['data']['frame_offset']
         self.list_prefix = conf['data']['list_prefix']
         self.geometry = conf['geom']['file_path']
         self.geom_template = conf['geom']['template_path']
@@ -162,7 +163,8 @@ class Workflow:
                                        'PEAK_THRESHOLD': self.peak_threshold,
                                        'PEAK_MIN_PX': self.peak_min_px,
                                        'PEAK_SNR': self.peak_snr,
-                                       'INDEX_METHOD': self.index_method
+                                       'INDEX_METHOD': self.index_method,
+                                       'INT_RADII':self.integration_radii
                                        })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
@@ -176,16 +178,6 @@ class Workflow:
         """ Issue a formal sbatch submission but without array i. e. for a
             single process
         """
-        if self.interactive:
-            _int_radii = input('Integration radii around predicted Bragg-peak'
-                               f'positions [{self.integration_radii}] > ')
-            if _int_radii != '':
-                try:
-                    _ = [int(x) for x in _int_radii.split(',')]
-                    self.integration_radii = _int_radii
-                except ValueError:
-                    warnings.warn('Wrong format or types for integration-radii parameter')
-
         with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
             f.write(PROC_BASH_DIRECT % {'PREFIX': self.list_prefix,
                                         'GEOM': self.geometry,
@@ -377,9 +369,11 @@ class Workflow:
                 * len(self.vds_names)
             warnings.warn('Requested number of nodes was not an integer'
             f' multiple of runs/VDS files;\n set to: {self.n_nodes_all}')
+        sub_total = self.n_frames // len(self.vds_names) 
         for i, vds_name in enumerate(self.vds_names):
             split_indices = np.array_split(
-                np.arange(self.n_frames / len(self.vds_names), dtype=int),
+                np.arange(self.frame_offset, self.frame_offset + sub_total,
+                          dtype=int),
                 (self.n_nodes_all / len(self.vds_names)))
             for j, sub_indices in enumerate(split_indices):
                 chunk = i * len(split_indices) + j
@@ -497,7 +491,8 @@ class Workflow:
         self.cell_file = f'{self.cell_file}_refined'
 
     def merge_bragg_obs(self):
-
+        """ Interface to the CrystFEL utilities for the 'merging' steps
+        """
         # scale and average using partialator
         with open('_tmp_partialator.sh', 'w') as f:
             f.write(PARTIALATOR_WRAP % {
@@ -544,6 +539,15 @@ class Workflow:
         self.distribute_hits()
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_higher)
+        if self.interactive:
+            _int_radii = input('Integration radii around predicted Bragg-peak'
+                               f'positions [{self.integration_radii}] > ')
+            if _int_radii != '':
+                try:
+                    _ = [int(x) for x in _int_radii.split(',')][:3]
+                    self.integration_radii = _int_radii
+                except ValueError:
+                    warnings.warn('Wrong format or types for integration-radii parameter')
         self.wrap_process(res_limit, cell_keyword, filtered=True)
         report_total_rate(self.list_prefix, self.n_frames)
         report_cells(self.list_prefix, self.cell_info)
@@ -637,7 +641,7 @@ class Workflow:
             print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
-            self.distribute()
+            self.distribute_vds()
             self.wrap_process(filtered=False)
 
         print('\n-----   TASK: check crystal frames and refine unit cell -----')
