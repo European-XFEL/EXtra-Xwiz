@@ -13,6 +13,7 @@ n_frames = 100000
 frame_offset = 0
 vds_names = "xmpl_30_vds.cxi"
 vds_mask_bad = "0xffff"
+cxi_names = "p2304_r0108.cxi"
 list_prefix = "xmpl_30"
 
 [geom]
@@ -31,7 +32,8 @@ resolution = 4.0
 peak_method = "peakfinder8"
 peak_threshold = 800
 peak_snr = 5
-peak_min_px = 1 
+peak_min_px = 1
+peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 unit_cell = "hewl.cell"
 n_cores = 40
@@ -83,6 +85,29 @@ indexamajig \\
   --min-snr=%(PEAK_SNR)s \\
   --threshold=%(PEAK_THRESHOLD)s \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
+  --indexing=%(INDEX_METHOD)s \\
+  --copy-hdf5-field=/entry_1/pulseId \\
+  --copy-hdf5-field=/entry_1/trainId \\
+  --no-non-hits-in-stream
+"""
+
+PROC_CXI_BASH_SLURM = """\
+#!/bin/sh
+source /usr/share/Modules/init/sh
+
+module load ccp4/7.0
+module load exfel
+module load spack
+spack load crystfel@0.8.0
+
+indexamajig \\
+  -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
+  -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
+  -g %(GEOM)s %(CRYSTAL)s \\
+  -j %(CORES)s \\
+  --highres=%(RESOLUTION)s \\
+  --peaks=cxi \\
+  --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
   --indexing=%(INDEX_METHOD)s \\
   --copy-hdf5-field=/entry_1/pulseId \\
   --copy-hdf5-field=/entry_1/trainId \\
