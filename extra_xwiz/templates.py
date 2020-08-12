@@ -66,7 +66,7 @@ extra-data-make-virtual-cxi \\
   --fill-value mask %(MASK_BAD)s
 """
 
-PROC_BASH_SLURM = """\
+PROC_VDS_BASH_SLURM = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
@@ -109,8 +109,8 @@ indexamajig \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
   --indexing=%(INDEX_METHOD)s \\
-  --copy-hdf5-field=/entry_1/pulseId \\
-  --copy-hdf5-field=/entry_1/trainId \\
+  --copy-hdf5-field=/instrument/pulseID \\
+  --copy-hdf5-field=/instrument/trainID \\
   --no-non-hits-in-stream
 """
 

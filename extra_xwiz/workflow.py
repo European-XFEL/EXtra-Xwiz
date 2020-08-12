@@ -9,9 +9,9 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
-                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
-                        POINT_GROUPS, MAKE_VDS)
+from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
+                        PARTIALATOR_WRAP, CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
+                        CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
                        get_panel_offsets)
@@ -63,7 +63,7 @@ class Workflow:
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
-        self.peaks_path = ['proc_coarse']['peaks_hdf5_path']
+        self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
@@ -169,7 +169,7 @@ class Workflow:
                      'INT_RADII':self.integration_radii
                 })
             else:
-                f.write(PROC_BASH_SLURM % {
+                f.write(PROC_VDS_BASH_SLURM % {
                     'PREFIX': prefix,
                     'GEOM': self.geometry,
                     'CRYSTAL': cell_keyword,
@@ -240,7 +240,7 @@ class Workflow:
 
     def check_cxi(self):
         """ Optional name-by-name confirmation or override of CXI file names;
-            storage of experiment identifyers.
+            storage of experiment identifiers.
         """
         if self.interactive:
             for i, cxi_name in enumerate(self.cxi_names):
@@ -301,25 +301,36 @@ class Workflow:
             print(f'Data set {i:02d}: {vds_name} '
                   f'contains {self.exp_ids[i].shape[0]} frames in total.')
 
-    # TO DO: make the vice-versa check for a Cheetah-CXI session
     def check_geom_format(self):
-        """ Verify that the provided geometry file is VDS-CXI compatible,
-            unless we are in a Cheetah-CXI session.
-            If required, transfer relevant geometry onto a valid template.
+        """ Verify that the provided geometry file is compatible to respective
+            data file: VDS-CXI or Cheetah-CXI.
         """
-        if self.use_peaks:
-            return True
         with open(self.geometry, 'r') as f:
-            for ln in f:
-                if 'max_ss' in ln and not 'bad' in ln and int(ln.split()[-1]) > 511:
-                    print('Geometry file is not compatible to EuXFEL-VDS')
+            # XFEL-VDS case with dim 1 = mod-ix, dim 2 = ss, ss resets
+            if not self.use_peaks:
+                for ln in f:
+                    if 'max_ss' in ln and not 'bad' in ln and int(ln.split()[-1]) > 511:
+                        print('Geometry file is not compatible to EuXFEL-VDS')
+                        return False
+            # Cheetah-CXI case with continuous slow-scan (dim 1 = ss)
+            else:
+                panels_max_ss = []
+                for ln in f:
+                    if 'max_ss' in ln and not 'bad' in ln:
+                        panels_max_ss.append(int(ln.split()[-1]))
+                    if '/dim1 = 0' in ln:
+                        print('Geometry file is not compatible to Cheetah-CXI')
+                        return False
+                if max(panels_max_ss) <= 511:
+                    print('Geometry file is not compatible to Cheetah-CXI')
                     return False
-        print('Geometry file is format-compatible to EuXFEL-VDS')
+
+        print('Geometry file is format-compatible to corresponding data')
         return True
 
     def transfer_geometry(self):
         """ Transfer corner x/y positions and fs/ss vectors onto a geometry
-            file template VDS/CXI format  
+            file template in suited format (user ensures correct template)  
         """
         if self.interactive:
             _geom_template = \
