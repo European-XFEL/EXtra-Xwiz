@@ -14,7 +14,7 @@ from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
                         CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
-                       get_panel_offsets)
+                       get_panel_offsets, check_geom_format)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string,
                         scan_cheetah_proc_dir, hex_to_int)
@@ -301,33 +301,6 @@ class Workflow:
             print(f'Data set {i:02d}: {vds_name} '
                   f'contains {self.exp_ids[i].shape[0]} frames in total.')
 
-    def check_geom_format(self):
-        """ Verify that the provided geometry file is compatible to respective
-            data file: VDS-CXI or Cheetah-CXI.
-        """
-        with open(self.geometry, 'r') as f:
-            # XFEL-VDS case with dim 1 = mod-ix, dim 2 = ss, ss resets
-            if not self.use_peaks:
-                for ln in f:
-                    if 'max_ss' in ln and not 'bad' in ln and int(ln.split()[-1]) > 511:
-                        print('Geometry file is not compatible to EuXFEL-VDS')
-                        return False
-            # Cheetah-CXI case with continuous slow-scan (dim 1 = ss)
-            else:
-                panels_max_ss = []
-                for ln in f:
-                    if 'max_ss' in ln and not 'bad' in ln:
-                        panels_max_ss.append(int(ln.split()[-1]))
-                    if '/dim1 = 0' in ln:
-                        print('Geometry file is not compatible to Cheetah-CXI')
-                        return False
-                if max(panels_max_ss) <= 511:
-                    print('Geometry file is not compatible to Cheetah-CXI')
-                    return False
-
-        print('Geometry file is format-compatible to corresponding data')
-        return True
-
     def transfer_geometry(self):
         """ Transfer corner x/y positions and fs/ss vectors onto a geometry
             file template in suited format (user ensures correct template)  
@@ -364,8 +337,7 @@ class Workflow:
                                                         target_photon_energy))
                     elif ln[:10] == 'mask_bad =':
                         of.write('mask_bad = {}\n'.format(target_bad_pixel))
-                    elif ln[0] == 'p' and ('/corner_x =' in ln
-                                           or '/corner_y =' in ln):
+                    elif ln[0] == 'p' and ('/corner_x' in ln or '/corner_y' in ln) and ' = ' in ln:
                         tile_id = ln.split()[0]
                         of.write(
                             '{} = {}\n'.format(tile_id,
@@ -692,7 +664,7 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-        if self.check_geom_format() == False:
+        if check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
             print(f' Geometry transfered to new file "{self.geometry}".')
 
