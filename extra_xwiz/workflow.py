@@ -9,12 +9,12 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import (PROC_BASH_SLURM, PROC_BASH_DIRECT, PARTIALATOR_WRAP,
-                        CHECK_HKL_WRAP, COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP,
-                        POINT_GROUPS, MAKE_VDS)
+from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
+                        PARTIALATOR_WRAP, CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
+                        CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
-                       get_panel_offsets)
+                       get_panel_offsets, check_geom_format)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string,
                         scan_cheetah_proc_dir, hex_to_int)
@@ -26,7 +26,7 @@ from .summary import (create_new_summary, report_cell_check, report_step_rate,
 class Workflow:
 
     def __init__(self, home_dir, work_dir, automatic=False, reprocess=False,
-                 use_cheetah=False):
+                 use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
@@ -34,6 +34,7 @@ class Workflow:
         self.work_dir = work_dir
         self.interactive = not automatic
         self.reprocess = reprocess
+        self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
         self.exp_ids = []
         conf = config.load_from_file()
@@ -42,9 +43,10 @@ class Workflow:
         self.data_runs = [f'{data_path}r{run:04d}' for run in run_numbers]
         self.vds_names = conf['data']['vds_names'].split(',')
         if not len(self.vds_names) == len(self.data_runs):
-            print('CONFIG ERROR: unequal numbers of VDS files run-paths')
+            print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         self.vds_mask = conf['data']['vds_mask_bad']
+        self.cxi_names = conf['data']['cxi_names'].split(',')
         self.n_frames = conf['data']['n_frames']
         self.frame_offset = conf['data']['frame_offset']
         self.list_prefix = conf['data']['list_prefix']
@@ -61,6 +63,7 @@ class Workflow:
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
+        self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
         self.cell_file = conf['proc_coarse']['unit_cell']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
@@ -154,18 +157,31 @@ class Workflow:
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         duration = self.duration_hits if filtered else self.duration_all
         with open(f'{prefix}_proc-{self.step}.sh', 'w') as f:
-            f.write(PROC_BASH_SLURM % {'PREFIX': prefix,
-                                       'GEOM': self.geometry,
-                                       'CRYSTAL': cell_keyword,
-                                       'CORES': 40,
-                                       'RESOLUTION': high_res,
-                                       'PEAK_METHOD': self.peak_method,
-                                       'PEAK_THRESHOLD': self.peak_threshold,
-                                       'PEAK_MIN_PX': self.peak_min_px,
-                                       'PEAK_SNR': self.peak_snr,
-                                       'INDEX_METHOD': self.index_method,
-                                       'INT_RADII':self.integration_radii
-                                       })
+            if self.use_peaks:
+                f.write(PROC_CXI_BASH_SLURM % {
+                    'PREFIX': prefix,
+                    'GEOM': self.geometry,
+                    'CRYSTAL': cell_keyword,
+                    'CORES': 40,
+                    'RESOLUTION': high_res,
+                    'PEAKS_HDF5_PATH': self.peaks_path,
+                    'INDEX_METHOD': self.index_method,
+                     'INT_RADII':self.integration_radii
+                })
+            else:
+                f.write(PROC_VDS_BASH_SLURM % {
+                    'PREFIX': prefix,
+                    'GEOM': self.geometry,
+                    'CRYSTAL': cell_keyword,
+                    'CORES': 40,
+                    'RESOLUTION': high_res,
+                    'PEAK_METHOD': self.peak_method,
+                    'PEAK_THRESHOLD': self.peak_threshold,
+                    'PEAK_MIN_PX': self.peak_min_px,
+                    'PEAK_SNR': self.peak_snr,
+                    'INDEX_METHOD': self.index_method,
+                     'INT_RADII':self.integration_radii
+                })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
                       f'--time={duration}',
@@ -174,6 +190,7 @@ class Workflow:
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]    # job id
 
+    # in principle: obsolete
     def process_slurm_single(self, high_res, cell_keyword):
         """ Issue a formal sbatch submission but without array i. e. for a
             single process
@@ -221,6 +238,25 @@ class Workflow:
                          res_limit)
         self.clean_up(job_id, filtered)
 
+    def check_cxi(self):
+        """ Optional name-by-name confirmation or override of CXI file names;
+            storage of experiment identifiers.
+        """
+        if self.interactive:
+            for i, cxi_name in enumerate(self.cxi_names):
+                _cxi_name = input(f'Cheetah-CXI file name [{cxi_name}] > ')
+                if _cxi_name != '':
+                    self.cxi_names[i] = _cxi_name
+
+        for i, cxi_name in enumerate(self.cxi_names):
+            if not os.path.exists(cxi_name):
+                warnings.warn(f' File {cxi_name} not found!')
+                exit(0)
+            with h5py.File(cxi_name, 'r') as f:
+                self.exp_ids.append(np.array(f['entry_1/experiment_identifier'][()]))
+            print(f'Data set {i:02d}: {cxi_name} '
+                  f'contains {self.exp_ids[i].shape[0]} frames in total.')
+
     def make_virtual(self):
         """ Make reference to original data in run folders, provide VDS for
             usage with indexamajig (CXI compliant format)
@@ -232,11 +268,13 @@ class Workflow:
                 self.vds_mask = _vds_mask
         vds_mask_int = hex_to_int(self.vds_mask)
 
-        for i, vds_name in enumerate(self.vds_names):
-            if self.interactive:
+        if self.interactive:
+            for i, vds_name in enumerate(self.vds_names):
                 _vds_name = input(f'Virtual data set name [{vds_name}] > ')
                 if _vds_name != '':
                     self.vds_names[i] = _vds_name
+
+        for i, vds_name in enumerate(self.vds_names):
             if not (os.path.exists(f'{self.work_dir}/{vds_name}')
                     or os.path.exists(f'{vds_name}')):
                 print('Creating a VDS file in CXI format')
@@ -257,25 +295,15 @@ class Workflow:
                 subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
             else:
                 print(f'Requested VDS {vds_name} is present already.')
+
             with h5py.File(vds_name, 'r') as f:
                 self.exp_ids.append(np.array(f['entry_1/experiment_identifier'][()]))
-            print(f'Data set {i} contains {self.exp_ids[i].shape[0]} frames in total.')
-
-    def check_geom_format(self):
-        """ Verify that the provided geometry file is VDS/CXI compatible.
-            If it is not, transfer its contents onto a valid template
-        """
-        with open(self.geometry, 'r') as f:
-            for ln in f:
-                if 'max_ss' in ln and not 'bad' in ln and int(ln.split()[-1]) > 511:
-                    print('Geometry file is not compatible to EuXFEL-VDS')
-                    return False
-        print('Geometry file is format-compatible to EuXFEL-VDS')
-        return True
+            print(f'Data set {i:02d}: {vds_name} '
+                  f'contains {self.exp_ids[i].shape[0]} frames in total.')
 
     def transfer_geometry(self):
         """ Transfer corner x/y positions and fs/ss vectors onto a geometry
-            file template VDS/CXI format  
+            file template in suited format (user ensures correct template)  
         """
         if self.interactive:
             _geom_template = \
@@ -309,8 +337,7 @@ class Workflow:
                                                         target_photon_energy))
                     elif ln[:10] == 'mask_bad =':
                         of.write('mask_bad = {}\n'.format(target_bad_pixel))
-                    elif ln[0] == 'p' and ('/corner_x =' in ln
-                                           or '/corner_y =' in ln):
+                    elif ln[0] == 'p' and ('/corner_x' in ln or '/corner_y' in ln) and ' = ' in ln:
                         tile_id = ln.split()[0]
                         of.write(
                             '{} = {}\n'.format(tile_id,
@@ -351,36 +378,36 @@ class Workflow:
             if _list_prefix != '':
                 self.list_prefix = _list_prefix
 
-    def distribute_vds(self):
-        """ Distribute the consecutive frames as in the VDS, accounting for
-            the number to be processed, onto N chunks, and write into N
-            temporary .lst files
+    def distribute_data(self):
+        """ Distribute the consecutive data frames as in the VDS or Cheetah-CXI
+            accounting for the number to be processed, onto N chunks, and write
+            into N temporary .lst files
         """
         self.prep_distribute()
+        ds_names = self.cxi_names if self.use_peaks else self.vds_names
         n_frames_total = sum([self.exp_ids[i].shape[0] for i in range(len(self.data_runs))])
         print('Total number of frames in all runs:', n_frames_total)
         if self.n_frames > n_frames_total:
             warnings.warn('Requested number of frames too large, reset to'
                           f' total frame number of {n_frames_total}.')
             self.n_frames = n_frames_total
-        if self.n_nodes_all % len(self.vds_names) != 0:
+        if self.n_nodes_all % len(ds_names) != 0:
             self.n_nodes_all = \
-                int(round(self.n_nodes_all / len(self.vds_names))) \
-                * len(self.vds_names)
+                int(round(self.n_nodes_all / len(ds_names))) * len(ds_names)
             warnings.warn('Requested number of nodes was not an integer'
-            f' multiple of runs/VDS files;\n set to: {self.n_nodes_all}')
-        sub_total = self.n_frames // len(self.vds_names) 
-        for i, vds_name in enumerate(self.vds_names):
+            f' multiple of runs/ DS files;\n set to: {self.n_nodes_all}')
+        sub_total = self.n_frames // len(ds_names) 
+        for i, ds_name in enumerate(ds_names):
             split_indices = np.array_split(
                 np.arange(self.frame_offset, self.frame_offset + sub_total,
                           dtype=int),
-                (self.n_nodes_all / len(self.vds_names)))
+                (self.n_nodes_all / len(ds_names)))
             for j, sub_indices in enumerate(split_indices):
                 chunk = i * len(split_indices) + j
                 print(len(sub_indices), end=' ')
                 with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
                     for index in sub_indices:
-                        f.write(f'{vds_name} //{index}\n')
+                        f.write(f'{ds_name} //{index}\n')
             print()
 
     def distribute_cheetah(self):
@@ -614,11 +641,19 @@ class Workflow:
             self.process_late()
             return
 
+        # principal modes of input and operation
         if self.use_cheetah:
+            # Cheetah multi-folder HDF5 w/o peaks (rare)
             self.distribute_cheetah()
         else:
-            self.make_virtual()
-            self.distribute_vds()
+            # single CXI or VDS-CXI data set per run (common)
+            if self.use_peaks:
+                # real CXI data set from Cheetah with peaks
+                self.check_cxi()
+            else:
+                # virtual CXI data set pointing to EuXFEL proc run
+                self.make_virtual()
+            self.distribute_data()
 
         print('\n-----   TASK: run CrystFEL (I)   -----')
         if self.interactive:
@@ -629,7 +664,7 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-        if self.check_geom_format() == False:
+        if check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
             print(f' Geometry transfered to new file "{self.geometry}".')
 
@@ -671,6 +706,11 @@ def main(argv=None):
         action='store_true'
     )
     ap.add_argument(
+        "-p", "--peak-input", help="use a CXI data set file from Cheetah"
+        " including pre-localized peaks",
+        action='store_true'
+    )
+    ap.add_argument(
         "-c", "--cheetah-input", help="skip VDS generation and assemble input"
         " from Cheetah folder contents",
         action='store_true'
@@ -689,6 +729,7 @@ def main(argv=None):
     workflow = Workflow(home_dir, work_dir,
                         automatic=args.automatic,
                         reprocess=args.reprocess,
+                        use_peaks=args.peak_input,
                         use_cheetah=args.cheetah_input)
     workflow.manage()
     print(48 * '~')
