@@ -41,8 +41,10 @@ setup(name="EXtra-xwiz",
           ],
       },
       install_requires=[
-          'toml',
-          'numpy'
+          'h5py',
+          'numpy',
+          'scipy',
+          'toml'
       ],
       extras_require={
           'docs': [],
