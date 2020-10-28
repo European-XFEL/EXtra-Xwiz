@@ -25,14 +25,15 @@ from .summary import (create_new_summary, report_cell_check, report_step_rate,
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, automatic=False, reprocess=False,
-                 use_peaks=False, use_cheetah=False):
+    def __init__(self, home_dir, work_dir, automatic=False, diagnostic=False,
+                 reprocess=False, use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
         self.home_dir = home_dir
         self.work_dir = work_dir
         self.interactive = not automatic
+        self.diagnostic = diagnostic
         self.reprocess = reprocess
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
@@ -472,7 +473,9 @@ class Workflow:
         input_lists = glob(f'{prefix}_*.lst')
         stream_out = glob(f'{prefix}_*.stream')
         slurm_out = glob(f'slurm-{job_id}_*.out')
-        file_items = input_lists + stream_out + slurm_out
+        file_items = input_lists + stream_out
+        if not self.diagnostic:
+            file_items += slurm_out
         for item in file_items:
             os.remove(item)
 
@@ -676,8 +679,13 @@ class Workflow:
             print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
-            self.distribute_vds()
-            self.wrap_process(filtered=False)
+            if self.use_peaks:
+                self.distribute_cheetah()
+            else:
+                self.distribute_data()
+            res_limit, cell_keyword = \
+                self.crystfel_from_config(high_res=self.res_lower)
+            self.wrap_process(res_limit, cell_keyword, filtered=False)
 
         print('\n-----   TASK: check crystal frames and refine unit cell -----')
         if self.interactive:
@@ -701,6 +709,11 @@ def main(argv=None):
         action='store_true'
     )
     ap.add_argument(
+        "-d", "--diagnostic", help="keep SLURM stdout captures for diagnoses"
+        " in case of problems",
+        action='store_true'
+    )
+    ap.add_argument(
         "-r", "--reprocess", help="enter workflow at the re-processing stage"
         " (refined unit cell and frame selection exist)",
         action='store_true'
@@ -718,7 +731,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
-    if not os.path.exists(f'{work_dir}/.xwiz_conf.toml'):
+    if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
         print('Configuration file is not present, will be created.')
         config.create_file()
         print('Please rerun now.')
@@ -728,9 +741,11 @@ def main(argv=None):
     print(48 * '~')
     workflow = Workflow(home_dir, work_dir,
                         automatic=args.automatic,
+                        diagnostic=args.diagnostic,
                         reprocess=args.reprocess,
                         use_peaks=args.peak_input,
                         use_cheetah=args.cheetah_input)
     workflow.manage()
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
+
