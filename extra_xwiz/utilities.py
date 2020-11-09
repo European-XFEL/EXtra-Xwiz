@@ -298,6 +298,17 @@ def cell_as_string(cell_file):
     return cell_string
 
 
+def determine_detector(path):
+    """Get a detector type label from file name in run folder
+    """
+    files = [[], []]
+    for i, label in enumerate(['AGIPD', 'JNGFR']):
+        files[i] = glob(f'{path}/*{label}*.h5')  
+        if len(files[i]) > 0:
+            return label
+    warnings.warn('NO FILES FOR SUPPORTED DETECTOR TYPES FOUND')
+    return ''
+
 def scan_cheetah_proc_dir(path):
     """Get all HDF5 file paths/names of a Cheetah-processed run folder by
        recursion, sample 1% of them for the frame number contained

@@ -12,12 +12,13 @@ from . import config
 from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
                         PARTIALATOR_WRAP, CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
                         CELL_EXPLORER_WRAP, POINT_GROUPS)
+from .virtualize import check_run_length, write_jf_vds
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
                        get_panel_offsets, check_geom_format)
 from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
-                        fit_unit_cell, replace_cell, cell_as_string,
-                        scan_cheetah_proc_dir, hex_to_int)
+                        fit_unit_cell, replace_cell, cell_as_string, hex_to_int,
+                        determine_detector, scan_cheetah_proc_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
@@ -287,13 +288,19 @@ class Workflow:
                             self.data_runs[i] = _data_path
                         else:
                             print(' [path not found - config kept]')
-
-                with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
-                    f.write(MAKE_VDS % {'DATA_PATH': self.data_runs[i],
-                                        'VDS_NAME': vds_name,
-                                        'MASK_BAD': vds_mask_int
-                                        })
-                subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
+                det_type = determine_detector(self.data_runs[i])
+                if det_type = 'AGIPD':
+                    print(' ... for AGIPD-1M data')
+                    with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
+                        f.write(MAKE_VDS % {'DATA_PATH': self.data_runs[i],
+                                            'VDS_NAME': vds_name,
+                                            'MASK_BAD': vds_mask_int
+                                            })
+                    subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
+                elif det_type = 'JNGFR':
+                    print(' ... for JUNGFRAU-4M data')
+                    nframes, ntrains, nmcells, seqfs = check_run_length(self.data_runs[i])
+                    write_jf_vds(self.data_runs[i], nframes, ntrains, nmcells, seqfs)
             else:
                 print(f'Requested VDS {vds_name} is present already.')
 
