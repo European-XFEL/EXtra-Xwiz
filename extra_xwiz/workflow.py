@@ -38,6 +38,7 @@ class Workflow:
         self.reprocess = reprocess
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
+        self.data_path = ''                        # for special cheetah tree
         self.exp_ids = []
         conf = config.load_from_file()
         data_path = conf['data']['path']
@@ -279,7 +280,7 @@ class Workflow:
         for i, vds_name in enumerate(self.vds_names):
             if not (os.path.exists(f'{self.work_dir}/{vds_name}')
                     or os.path.exists(f'{vds_name}')):
-                print('Creating a VDS file in CXI format')
+                print('Creating a VDS file in CXI format ...')
                 if self.interactive:
                     _data_path = input(f'Data path [{self.data_runs[i]}] > ')
                     if _data_path != '':
@@ -289,7 +290,7 @@ class Workflow:
                         else:
                             print(' [path not found - config kept]')
                 det_type = determine_detector(self.data_runs[i])
-                if det_type = 'AGIPD':
+                if det_type == 'AGIPD':
                     print(' ... for AGIPD-1M data')
                     with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
                         f.write(MAKE_VDS % {'DATA_PATH': self.data_runs[i],
@@ -297,10 +298,10 @@ class Workflow:
                                             'MASK_BAD': vds_mask_int
                                             })
                     subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
-                elif det_type = 'JNGFR':
+                elif det_type == 'JNGFR':
                     print(' ... for JUNGFRAU-4M data')
                     nframes, ntrains, nmcells, seqfs = check_run_length(self.data_runs[i])
-                    write_jf_vds(self.data_runs[i], nframes, ntrains, nmcells, seqfs)
+                    write_jf_vds(self.data_runs[i], vds_name, nframes, ntrains, nmcells, seqfs)
             else:
                 print(f'Requested VDS {vds_name} is present already.')
 
@@ -435,7 +436,7 @@ class Workflow:
             warnings.warn('Number of used files from requested number of'
                           f' frames exceeds total, reset to {n_files}.')
             n_used_files = n_files
-        file_indices = np.array_split(np.arange(n_used_files), self.n_nodes)
+        file_indices = np.array_split(np.arange(n_used_files), self.n_nodes_all)
         file_items = sorted([os.path.join(dp, f) for dp, dn, fn in os.walk(self.data_path) for f in fn])
         for chunk, indices in enumerate(file_indices):
             print(len(indices), end=' ')

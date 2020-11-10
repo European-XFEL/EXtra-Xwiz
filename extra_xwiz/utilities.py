@@ -77,15 +77,23 @@ def seconds(tm_str):
     return secs
 
 
-def print_progress_bar(i, n, n_crystals, length=80, fill='█'):
+def print_simple_bar(i, n, length=80, fill='█'):
     """ Visualize a percent fraction by a bar, update in-line using <CR> char.
+    """
+    percent = '{0:.1f}'.format(100 * (i / float(n)))
+    filled_len = int(length * i // n)
+    bar = fill * filled_len + '-' * (length - filled_len)
+    print('\r |%s| %s%%' % (bar, percent), end='\r')
+
+
+def print_crystfel_bar(i, n, n_crystals, length=80, fill='█'):
+    """ Like the simple bar, but with crystal number information
     """
     percent = '{0:.1f}'.format(100 * (i / float(n)))
     filled_len = int(length * i // n)
     bar = fill * filled_len + '-' * (length - filled_len)
     print('\r Progress: |%s| %s%%. ◆ %d' % (bar, percent, n_crystals),
           end='\r')
-
 
 def calc_progress(out_logs, n_total):
     """ Compare total number of processed frames (from logs) at a given time
@@ -113,7 +121,7 @@ def calc_progress(out_logs, n_total):
         n_crystals.append(current_crystals)
     # update progress bar unless stdout-logs are not yet available
     if len(n_frames) > 0 and len(n_crystals) > 0:
-        print_progress_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
+        print_crystfel_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
 
 
 def wait_or_cancel(job_id, n_nodes, n_total, time_limit):

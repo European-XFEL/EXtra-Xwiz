@@ -5,6 +5,8 @@ from  os.path import split as pathsplit
 import re
 import sys
 
+from .utilities import print_simple_bar
+
 H5_ROOT = 'INSTRUMENT/SPB_IRDA_JF4M/DET/JNGFR'
 DTYPES = {'adc': np.float32, 'gain': np.uint8, 'mask': np.uint32,
           'memoryCell': np.uint8, 'frameNumber': np.uint64 }
@@ -32,21 +34,24 @@ def check_run_length(run_path):
     return nframes[0], ntrains[0], nmcells[0][0], jf_seqfs
 
 
-def write_jf_vds(run_path, nframes, ntrains, nmcells, seqfs):
+def write_jf_vds(run_path, out_fn, nframes, ntrains, nmcells, seqfs):
 
     print(f'mapping data from path: {run_path}')
     tail_fn = pathsplit(seqfs[0])[-1]
     stem_fn = tail_fn[:tail_fn.find('-JNGFR')]
     print(f'stem file name:', stem_fn)
 
-    with h5.File(f'{stem_fn}_vds.h5', 'w') as wf:
+    with h5.File(out_fn, 'w') as wf:
 
         # pixel-image data sets
         for item in ['adc', 'gain', 'mask']:
+            print(f'\n - Mapping data set {item}')
+            sys.stdout.flush()
             layout = h5.VirtualLayout((nframes, 8, 512, 1024), dtype=DTYPES[item]) 
 
+            u = 0  # unit step
             for mod_num in range(1, 9):
-                k = 0
+                k = 0  # frame number
                 for seq_num in range(len(seqfs)):
                     if k == nframes:
                         print('WARNING: frame limit reached ... ending here.')
@@ -59,16 +64,21 @@ def write_jf_vds(run_path, nframes, ntrains, nmcells, seqfs):
                             for j in range(nmcells):
                                 layout[k, mod_num-1, :, :] = h5.VirtualSource(ds)[i, j]
                                 k += 1
+                                u += 1
+                    print_simple_bar(u, 8 * nframes, length=50)
 
             wf.create_virtual_dataset(f'entry_1/instrument_1/detector_1/{VDS_SPEC[item]}', layout)
 
         # cellId and frameNum: REAL ntrains x ncells per module/file 
         #  --> VIRTUAL: nframes x module
         for item in ['memoryCell', 'frameNumber']:
+            print(f'\n - Mapping data set {item}')
+            sys.stdout.flush()
             layout = h5.VirtualLayout((nframes, 8), dtype=DTYPES[item])
 
+            u = 0  # unit step
             for mod_num in range(1, 9):
-                k = 0
+                k = 0  # frame number
                 for seq_num in range(len(seqfs)):
                     if k == nframes:
                         print('WARNING: frame limit reached ... ending here.')
@@ -81,6 +91,8 @@ def write_jf_vds(run_path, nframes, ntrains, nmcells, seqfs):
                             for j in range(nmcells):
                                 layout[k, mod_num-1] = h5.VirtualSource(ds)[i, j]
                                 k += 1
+                                u += 1
+                    print_simple_bar(u, 8 * nframes, length=50)
 
             wf.create_virtual_dataset(f'entry_1/{VDS_SPEC[item]}', layout)
 
@@ -88,6 +100,8 @@ def write_jf_vds(run_path, nframes, ntrains, nmcells, seqfs):
         #    cells-per-train)   ! CAVEAT: pulseId not available from original,
         #    will fill in memory cell index instead !
         for item in ['trainId', 'pulseId']:
+            print(f'\n - Mapping data set {item}')
+            sys.stdout.flush()
             layout = h5.VirtualLayout((nframes,), dtype=np.uint64)
 
             k = 0
