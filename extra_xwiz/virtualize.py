@@ -45,7 +45,7 @@ def write_jf_vds(run_path, out_fn, nframes, ntrains, nmcells, seqfs):
 
         # pixel-image data sets
         for item in ['adc', 'gain', 'mask']:
-            print(f'\n - Mapping data set {item}')
+            print(f'\n - Mapping data set: {item}')
             sys.stdout.flush()
             layout = h5.VirtualLayout((nframes, 8, 512, 1024), dtype=DTYPES[item]) 
 
@@ -72,7 +72,7 @@ def write_jf_vds(run_path, out_fn, nframes, ntrains, nmcells, seqfs):
         # cellId and frameNum: REAL ntrains x ncells per module/file 
         #  --> VIRTUAL: nframes x module
         for item in ['memoryCell', 'frameNumber']:
-            print(f'\n - Mapping data set {item}')
+            print(f'\n - Mapping data set: {item}')
             sys.stdout.flush()
             layout = h5.VirtualLayout((nframes, 8), dtype=DTYPES[item])
 
@@ -100,7 +100,7 @@ def write_jf_vds(run_path, out_fn, nframes, ntrains, nmcells, seqfs):
         #    cells-per-train)   ! CAVEAT: pulseId not available from original,
         #    will fill in memory cell index instead !
         for item in ['trainId', 'pulseId']:
-            print(f'\n - Mapping data set {item}')
+            print(f'\n - Mapping data set: {item}')
             sys.stdout.flush()
             layout = h5.VirtualLayout((nframes,), dtype=np.uint64)
 

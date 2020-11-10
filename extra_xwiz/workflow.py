@@ -213,7 +213,7 @@ class Workflow:
                                         })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
-                      f'--time={self.duration}',
+                      f'--time={self.duration_all}',
                       f'./{self.list_prefix}_proc-1.sh']
         proc_out = subprocess.check_output(slurm_args)
         return proc_out.decode('utf-8').split()[-1]  # job id

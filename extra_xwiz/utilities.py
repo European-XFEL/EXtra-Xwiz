@@ -77,7 +77,7 @@ def seconds(tm_str):
     return secs
 
 
-def print_simple_bar(i, n, length=80, fill='█'):
+def print_simple_bar(i, n, length=80, fill='#'):
     """ Visualize a percent fraction by a bar, update in-line using <CR> char.
     """
     percent = '{0:.1f}'.format(100 * (i / float(n)))
@@ -86,14 +86,15 @@ def print_simple_bar(i, n, length=80, fill='█'):
     print('\r |%s| %s%%' % (bar, percent), end='\r')
 
 
-def print_crystfel_bar(i, n, n_crystals, length=80, fill='█'):
+def print_crystfel_bar(i, n, n_crystals, length=80, fill='#'):
     """ Like the simple bar, but with crystal number information
     """
-    percent = '{0:.1f}'.format(100 * (i / float(n)))
+    progress = '{0:.1f}'.format(100 * (i / float(n)))
     filled_len = int(length * i // n)
     bar = fill * filled_len + '-' * (length - filled_len)
-    print('\r Progress: |%s| %s%%. ◆ %d' % (bar, percent, n_crystals),
-          end='\r')
+    index_rate = 100 * n_crystals / float(n)
+    print('\r |%s| %s%%, ◆ %d Indexing rate: %.1f%%' % (bar, progress,
+          n_crystals, index_rate), end='\r')
 
 def calc_progress(out_logs, n_total):
     """ Compare total number of processed frames (from logs) at a given time
