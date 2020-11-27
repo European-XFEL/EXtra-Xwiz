@@ -88,7 +88,8 @@ indexamajig \\
   --indexing=%(INDEX_METHOD)s \\
   --copy-hdf5-field=/entry_1/pulseId \\
   --copy-hdf5-field=/entry_1/trainId \\
-  --no-non-hits-in-stream
+  --no-non-hits-in-stream \\
+  --int-radius=%(INT_RADII)s
 """
 
 PROC_CXI_BASH_SLURM = """\
