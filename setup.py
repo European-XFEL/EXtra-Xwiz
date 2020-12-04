@@ -36,8 +36,10 @@ setup(name="EXtra-xwiz",
       },
       entry_points={
           "console_scripts": [
-              "xwiz-workflow = extra_xwiz.workflow:main",
-              "xwiz-cell-checker = extra_xwiz.cell_check:main"
+              "xwiz-cell-checker = extra_xwiz.cell_check:main",
+              "xwiz-collector = extra_xwiz.collector:main",
+              "xwiz-powder = extra_xwiz.powder:main",
+              "xwiz-workflow = extra_xwiz.workflow:main"
           ],
       },
       install_requires=[
