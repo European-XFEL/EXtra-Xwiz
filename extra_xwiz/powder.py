@@ -54,7 +54,7 @@ def pix_max_over_frames(fn, n_frames):
     print('maxing finished.')
     return px_max
 
-def write_vds(data, fn):
+def write_hdf5(data, fn):
     data = np.expand_dims(data, axis=0)
     print('output data', data.shape)
     with h5.File(fn, 'w') as f:
@@ -62,12 +62,12 @@ def write_vds(data, fn):
     print('writing finished.')
 
 def main(argv=None):
-    ap = ArgumentParser(prog='make-virtual-cxi')
-    ap.add_argument('vds_in', help='input VDS file name')
-    ap.add_argument('vds_out', help='output VDS file name')
+    ap = ArgumentParser(prog='powder.py')
+    ap.add_argument('vds_in', help='input VDS file name (multi-frame data)')
+    ap.add_argument('h5_out', help='output HDF5 file name (virtual powder image)')
     args = ap.parse_args(argv)
 
     n_frames = read_size_from_file(args.vds_in)
     max_data = pix_max_over_frames(args.vds_in, n_frames)
-    write_vds(max_data, args.vds_out)
+    write_hdf5(max_data, args.h5_out)
 
