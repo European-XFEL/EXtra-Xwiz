@@ -203,3 +203,15 @@ spack load crystfel@0.8.0
 
 cell_explorer %(PREFIX)s.stream
 """
+
+HDFSEE_WRAP = """\
+#!/bin/sh
+source /usr/share/Modules/init/sh
+
+module load exfel
+module load spack
+spack load crystfel@0.8.0
+
+hdfsee %(DATA_FILE)s -g %(GEOM)s
+"""
+

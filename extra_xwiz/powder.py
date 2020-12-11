@@ -7,6 +7,9 @@ import re
 import sys
 import time
 
+from . import config
+from .templates import HDFSEE_WRAP
+
 '''
     idx = np.arange(numFrames, dtype=np.int32)
     k, m = divmod(numFrames, poolSize)
@@ -17,10 +20,9 @@ import time
     for n in range(poolSize):
         args.append([VDS_filename, chunks[n]])
 
-'''
-
 poolSize = mp.cpu_count() - 1
 print('Number of available cores:', poolSize)
+'''
 
 def read_size_from_file(fn):
     with h5.File(fn, 'r') as f:
@@ -43,7 +45,12 @@ def pix_max_over_frames(fn, n_frames):
             low = 1000 * i
             high = min(1000 * (i+1), n_frames)
             t1 = time.time()
-            data = _data[low:high]  # instantiation of array
+            # data = _data[low:high]  # instantiation of array
+            data = np.zeros((high-low,) + _data.shape[1:], dtype=_data.dtype)
+            k = 0
+            for j in range(low, high):
+                data[k] = _data[j]
+                k += 1
             t2 = time.time()
             print(f'sub-max for range {low:5d} to {high:5d}') 
             _px_max.append(np.max(data, axis=0))
@@ -54,12 +61,21 @@ def pix_max_over_frames(fn, n_frames):
     print('maxing finished.')
     return px_max
 
+
 def write_hdf5(data, fn):
     data = np.expand_dims(data, axis=0)
     print('output data', data.shape)
     with h5.File(fn, 'w') as f:
         ds = f.create_dataset('entry_1/data_1/data', data=data)
     print('writing finished.')
+
+
+def display_hdf5(fn):
+    conf = config.load_from_file()
+    with open('_hdfsee.sh', 'w') as f:
+        f.write(HDFSEE_WRAP % {'DATA_FILE': fn, 'GEOM': conf['geom']['file_path'] })
+    subprocess.check_output(['sh', '_hdfsee.sh'])
+
 
 def main(argv=None):
     ap = ArgumentParser(prog='powder.py')
@@ -70,4 +86,6 @@ def main(argv=None):
     n_frames = read_size_from_file(args.vds_in)
     max_data = pix_max_over_frames(args.vds_in, n_frames)
     write_hdf5(max_data, args.h5_out)
+    display_hdf5(args.h5_out)
+
 
