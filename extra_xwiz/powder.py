@@ -33,7 +33,7 @@ def read_size_from_file(fn):
 
 def pix_max_over_frames(fn, n_frames):
     if (n_frames % 1000) == 0:
-        n_chunks = n_frames / 1000
+        n_chunks = int(n_frames / 1000)
     else: 
         n_chunks = n_frames // 1000 + 1
     print(f'will find max in {n_chunks} chunks.')
@@ -70,10 +70,9 @@ def write_hdf5(data, fn):
     print('writing finished.')
 
 
-def display_hdf5(fn):
-    conf = config.load_from_file()
+def display_hdf5(fn, geom):
     with open('_hdfsee.sh', 'w') as f:
-        f.write(HDFSEE_WRAP % {'DATA_FILE': fn, 'GEOM': conf['geom']['file_path'] })
+        f.write(HDFSEE_WRAP % {'DATA_FILE': fn, 'GEOM': geom })
     subprocess.check_output(['sh', '_hdfsee.sh'])
 
 
@@ -83,9 +82,14 @@ def main(argv=None):
     ap.add_argument('h5_out', help='output HDF5 file name (virtual powder image)')
     args = ap.parse_args(argv)
 
+    conf = config.load_from_file()
     n_frames = read_size_from_file(args.vds_in)
+    max_frames = conf['data']['n_frames']
+    geom = conf['geom']['file_path']
+    if max_frames < n_frames:
+        print(f' truncation to {max_frames} frames.')
+    n_frames = int(min(n_frames, max_frames))
     max_data = pix_max_over_frames(args.vds_in, n_frames)
     write_hdf5(max_data, args.h5_out)
-    display_hdf5(args.h5_out)
-
+    display_hdf5(args.h5_out, geom)
 
