@@ -4,6 +4,7 @@ import h5py as h5
 import multiprocessing as mp
 import numpy as np
 import re
+import subprocess
 import sys
 import time
 
