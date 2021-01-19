@@ -9,9 +9,9 @@ import subprocess
 import warnings
 
 from . import config
-from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
-                        PARTIALATOR_WRAP, CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
-                        CELL_EXPLORER_WRAP, POINT_GROUPS)
+from .templates import (MAKE_VDS, PROC_BASH_DIRECT, PROC_VDS_BASH_SLURM, 
+                        PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
+                        COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .virtualize import check_run_length, write_jf_vds
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
@@ -43,7 +43,7 @@ class Workflow:
         conf = config.load_from_file()
         data_path = conf['data']['path']
         run_numbers = [int(n) for n in conf['data']['runs'].split(',')]
-        self.data_runs = [f'{data_path}r{run:04d}' for run in run_numbers]
+        self.data_runs = [f'{data_path}/r{run:04d}' for run in run_numbers]
         self.vds_names = conf['data']['vds_names'].split(',')
         if not len(self.vds_names) == len(self.data_runs):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
