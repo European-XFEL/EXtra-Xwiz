@@ -33,4 +33,66 @@ It is named ``.xwiz_conf.toml`` and will be written to the present working
 folder (PWD, ``.``) i. e. to where the tool was called from.
 It is strongly recommeded to revise that configuration file and to replace with
 reasonable values, at least the input paths.
- 
+
+
+## UPDATING XWIZ ON THE DA-SW DISTRIBUTION
+
+Xwiz is not part of the general distribution  
+(/gpfs/exfel/sw/software/xfel_anaconda3/1.1)  
+but lives in a virtual environment based on that "DA-Python"
+
+1. login to Mawell
+
+2. ``ssh xsoft@max-exfl001``
+
+3. one of the two:
+
+ a) New tentative Gitlab download 
+
+```
+   git clone ssh://git@git.xfel.eu:10022/dataAnalysis/crystfel_spb_workflow.git
+   cd crystfel_spb_workflow
+   git checkout dev
+```
+
+ b) Update existing local code repo, if already/still existing
+
+```
+   cd crystfel_spb_workflow
+   git fetch --all
+   git checkout dev
+   git pull
+```
+
+4. ``module load exfel EXtra-xwiz``
+
+   (to verify the correct Python interpreter for 
+    the virtual xwiz environment:  
+    ``type python``  
+    -> /gpfs/exfel/sw/software/extra-xwiz_env/bin/python  
+    ``type pip``  
+    -> /gpfs/exfel/sw/software/extra-xwiz_env/bin/pip  
+   )
+
+5. Given that you are in ~/crystfel_spb_workflow
+   and on branch dev
+
+   ``pip install .``
+
+6. remove tentative repo folder on ~ of xsoft (optional)
+
+```
+   cd ..
+   rm -r crystfel_spb_workflow
+```
+
+I typically remove the dev-code folder if I do not plan future updates soon,
+because then the xsoft homedir stays clean,
+but if we're in a frequent development cycle, one could keep it
+in order to follow the fetch/pull approach.
+
+On the other hand, faster development and testing cycles are
+probably better done with on the own user-home space with  
+``pip install --user -e`` 
+
+
