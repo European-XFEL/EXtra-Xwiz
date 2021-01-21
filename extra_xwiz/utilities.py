@@ -108,7 +108,7 @@ def calc_progress(out_logs, n_total):
     n_crystals = []
     for log in out_logs:
         # extract numbers of frames processed
-        frames_pattern = '(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
+        frames_pattern = r'(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
         frame_info = re.findall(frames_pattern, open(log).read(), re.DOTALL)
         if len(frame_info) == 0:
             current_frames = 0
@@ -116,7 +116,7 @@ def calc_progress(out_logs, n_total):
             current_frames = int(frame_info[-1][1])
         n_frames.append(current_frames)
         # extract numbers of crystals found
-        crystal_pattern = '(\),\s*)(\d*)( crystals)'
+        crystal_pattern = r'(\),\s*)(\d*)( crystals)'
         crystal_info = re.findall(crystal_pattern, open(log).read(), re.DOTALL)
         if len(crystal_info) == 0:
             current_crystals = 0
@@ -300,7 +300,7 @@ def cell_as_string(cell_file):
     """
     cell_string = '{:20}'.format(cell_file)
     if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
-        cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+        cell_info = re.findall(r'( = )([^\s]+)', open(cell_file).read())
         cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
     elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
         cell_info = open(cell_file).read().splitlines()[0].split()[1:]

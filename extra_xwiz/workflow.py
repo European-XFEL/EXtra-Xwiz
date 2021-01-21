@@ -10,8 +10,8 @@ import warnings
 
 from . import config
 from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, PROC_CXI_BASH_SLURM,
-                        PARTIALATOR_WRAP, CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
-                        CELL_EXPLORER_WRAP, POINT_GROUPS)
+                        PROC_BASH_DIRECT, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
+                        COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .virtualize import check_run_length, write_jf_vds
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
