@@ -9,6 +9,9 @@ import subprocess
 import os, re, time
 import warnings
 
+# Local imports
+from . import crystfel_info as cri
+
 
 def hex_to_int(hex_str):
     """ Convert to base10 integer (decimal number) from explicit hexadecimal
@@ -99,7 +102,7 @@ def print_crystfel_bar(n_current, n_total, n_crystals, length=80, fill='#'):
     print('\r |%s| %s%%, ◆ %d, Indexing rate: %.1f%%' % (bar, progress,
           n_crystals, index_rate), end='\r')
 
-def calc_progress(out_logs, n_total):
+def calc_progress(out_logs, n_total, crystfel_version):
     """ Compare total number of processed frames (from logs) at a given time
         to the overall total number of frames to process.
         In addition collect number of found crystals for display.
@@ -108,16 +111,18 @@ def calc_progress(out_logs, n_total):
     n_crystals = []
     for log in out_logs:
         # extract numbers of frames processed
-        frames_pattern = '(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)'
-        frame_info = re.findall(frames_pattern, open(log).read(), re.DOTALL)
+        frames_pattern = cri.crystfel_info[crystfel_version] \
+                                          ['log_frames_pattern']
+        frame_info = re.findall(frames_pattern, open(log).read(), re.M)
         if len(frame_info) == 0:
             current_frames = 0
         else:
             current_frames = int(frame_info[-1][1])
         n_frames.append(current_frames)
         # extract numbers of crystals found
-        crystal_pattern = '(\),\s*)(\d*)( crystals)'
-        crystal_info = re.findall(crystal_pattern, open(log).read(), re.DOTALL)
+        crystal_pattern = cri.crystfel_info[crystfel_version] \
+                                           ['log_crystals_pattern']
+        crystal_info = re.findall(crystal_pattern, open(log).read(), re.M)
         if len(crystal_info) == 0:
             current_crystals = 0
         else:
@@ -128,7 +133,7 @@ def calc_progress(out_logs, n_total):
         print_crystfel_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
 
 
-def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
+def wait_or_cancel(job_id, n_nodes, n_total, time_limit, crystfel_version):
     """ Loop until queue is empty or time-limit reached
     """
     print(' Waiting for job-array', job_id)
@@ -152,14 +157,14 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit):
         except ValueError:
             # if for some reason the list 'times' is empty
             max_time = '0:00'
-        calc_progress(out_logs, n_total)
+        calc_progress(out_logs, n_total, crystfel_version)
         time.sleep(2)
     # to ensure a full bar after all tasks have finished.
-    calc_progress(out_logs, n_total)
+    calc_progress(out_logs, n_total, crystfel_version)
     print()
 
 
-def wait_single(job_id, n_total):
+def wait_single(job_id, n_total, crystfel_version):
     """ Loop until queue is empty (single non-array SLURM job)
     """
     print(' Waiting for job', job_id)
@@ -173,10 +178,10 @@ def wait_single(job_id, n_total):
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
         n_tasks = len(tasks)
-        calc_progress(out_logs, n_total)
+        calc_progress(out_logs, n_total, crystfel_version)
         time.sleep(2)
     # to ensure a full bar after all tasks have finished.
-    calc_progress(out_logs, n_total)
+    calc_progress(out_logs, n_total, crystfel_version)
     print()
 
 

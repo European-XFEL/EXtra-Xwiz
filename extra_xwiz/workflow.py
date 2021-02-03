@@ -9,6 +9,7 @@ import subprocess
 import warnings
 
 from . import config
+from . import crystfel_info as cri
 from .templates import (MAKE_VDS, PROC_BASH_DIRECT, PROC_VDS_BASH_SLURM, 
                         PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
                         COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
@@ -53,6 +54,10 @@ class Workflow:
         self.n_frames = conf['data']['n_frames']
         self.frame_offset = conf['data']['frame_offset']
         self.list_prefix = conf['data']['list_prefix']
+        self._crystfel_version = conf['crystfel']['version']
+        if self._crystfel_version not in cri.crystfel_info.keys():
+            raise ValueError(f'Unsupported CrystFEL version: '
+                             f'{self._crystfel_version}')
         self.geometry = conf['geom']['file_path']
         self.geom_template = conf['geom']['template_path']
         self.n_nodes_all = conf['slurm']['n_nodes_all']
@@ -162,6 +167,7 @@ class Workflow:
         with open(f'{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(PROC_CXI_BASH_SLURM % {
+                    'CRYSTFEL_VER': self._crystfel_version,
                     'PREFIX': prefix,
                     'GEOM': self.geometry,
                     'CRYSTAL': cell_keyword,
@@ -173,6 +179,7 @@ class Workflow:
                 })
             else:
                 f.write(PROC_VDS_BASH_SLURM % {
+                    'CRYSTFEL_VER': self._crystfel_version,
                     'PREFIX': prefix,
                     'GEOM': self.geometry,
                     'CRYSTAL': cell_keyword,
@@ -199,18 +206,20 @@ class Workflow:
             single process
         """
         with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
-            f.write(PROC_BASH_DIRECT % {'PREFIX': self.list_prefix,
-                                        'GEOM': self.geometry,
-                                        'CRYSTAL': cell_keyword,
-                                        'CORES': 40,
-                                        'RESOLUTION': high_res,
-                                        'PEAK_METHOD': self.peak_method,
-                                        'PEAK_THRESHOLD': self.peak_threshold,
-                                        'PEAK_MIN_PX': self.peak_min_px,
-                                        'PEAK_SNR': self.peak_snr,
-                                        'INDEX_METHOD': self.index_method,
-                                        'INT_RADII': self.integration_radii
-                                        })
+            f.write(PROC_BASH_DIRECT % {
+                'CRYSTFEL_VER': self._crystfel_version,
+                'PREFIX': self.list_prefix,
+                'GEOM': self.geometry,
+                'CRYSTAL': cell_keyword,
+                'CORES': 40,
+                'RESOLUTION': high_res,
+                'PEAK_METHOD': self.peak_method,
+                'PEAK_THRESHOLD': self.peak_threshold,
+                'PEAK_MIN_PX': self.peak_min_px,
+                'PEAK_SNR': self.peak_snr,
+                'INDEX_METHOD': self.index_method,
+                'INT_RADII': self.integration_radii
+            })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
                       f'--time={self.duration_all}',
@@ -233,7 +242,12 @@ class Workflow:
                 job_duration = _duration
         job_id = self.process_slurm_multi(res_limit, cell_keyword,
                                           filtered=filtered)
-        wait_or_cancel(job_id, n_nodes, n_frames, job_duration)
+        wait_or_cancel(
+            job_id,
+            n_nodes,
+            n_frames,
+            job_duration,
+            self._crystfel_version)
         self.concat(filtered)
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
@@ -500,7 +514,10 @@ class Workflow:
            indexed w/o prior cell
         """
         with open('_cell_explorer.sh', 'w') as f:
-            f.write(CELL_EXPLORER_WRAP % {'PREFIX': self.list_prefix})
+            f.write(CELL_EXPLORER_WRAP % {
+                'CRYSTFEL_VER': self._crystfel_version,
+                'PREFIX': self.list_prefix
+            })
         subprocess.check_output(['sh', '_cell_explorer.sh'])
         _explorer_cell = ''
         while not os.path.exists(_explorer_cell):
@@ -534,6 +551,7 @@ class Workflow:
         # scale and average using partialator
         with open('_tmp_partialator.sh', 'w') as f:
             f.write(PARTIALATOR_WRAP % {
+                'CRYSTFEL_VER': self._crystfel_version,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
                 'N_ITER': self.scale_iter,
@@ -545,6 +563,7 @@ class Workflow:
         # create simple resolution-bin table
         with open('_tmp_table_gen.sh', 'w') as f:
             f.write(CHECK_HKL_WRAP % {
+                'CRYSTFEL_VER': self._crystfel_version,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
                 'UNIT_CELL': self.cell_file,
@@ -556,6 +575,7 @@ class Workflow:
         for i in range(3):
             with open(f'_tmp_table_gen{i}.sh', 'w') as f:
                 f.write(COMPARE_HKL_WRAP % {
+                    'CRYSTFEL_VER': self._crystfel_version,
                     'PREFIX': self.list_prefix,
                     'POINT_GROUP': self.point_group,
                     'UNIT_CELL': self.cell_file,
@@ -677,7 +697,7 @@ class Workflow:
                     warnings.warn('Geometry file not found; default kept.')
         if check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
-            print(f' Geometry transfered to new file "{self.geometry}".')
+            print(f' Geometry transferred to new file "{self.geometry}".')
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
