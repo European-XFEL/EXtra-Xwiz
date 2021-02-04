@@ -6,9 +6,7 @@ import re
 from subprocess import check_output
 import sys
 
-from extra_xwiz.templates import (PROC_VDS_BASH_SLURM, PARTIALATOR_WRAP,
-                                  CHECK_HKL_WRAP, COMPARE_HKL_WRAP,
-                                  CELL_EXPLORER_WRAP, POINT_GROUPS)
+from extra_xwiz.templates import (PROC_VDS_BASH_SLURM)
 
 from extra_xwiz.utilities import wait_or_cancel
 
@@ -88,12 +86,14 @@ def average_cell(run_nums, cell_file):
 
 
 def process_frames(conf, n_frames, n_chunks=10):
+    crystfel_version = conf['crystfel']['version']
     cell_file = conf['proc_coarse']['unit_cell']
     partition = conf['slurm']['partition']
     n_nodes = conf['slurm']['n_nodes_all']
     duration = conf['slurm']['duration_all']
     with open(f'process.sh', 'w') as f:
         f.write(PROC_VDS_BASH_SLURM % {
+                'CRYSTFEL_VER': crystfel_version,
                 'PREFIX': 'frames',
                 'GEOM': conf['geom']['file_path'],
                 'CRYSTAL': f'-p {cell_file}',
@@ -113,7 +113,7 @@ def process_frames(conf, n_frames, n_chunks=10):
                   f'./process.sh']
     proc_out = check_output(slurm_args)
     job_id = proc_out.decode('utf-8').split()[-1]    # job id
-    wait_or_cancel(job_id, n_chunks, n_frames, duration)
+    wait_or_cancel(job_id, n_chunks, n_frames, duration, crystfel_version)
 
 
 def main(argv=None):

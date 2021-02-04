@@ -16,6 +16,9 @@ vds_mask_bad = "0xffff"
 cxi_names = "p2304_r0108.cxi"
 list_prefix = "xmpl_30"
 
+[crystfel]
+version = '0.8.0'
+
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
 template_path = "./agipd_mar18_v11.geom"
@@ -73,7 +76,7 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -99,7 +102,7 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -122,7 +125,7 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 indexamajig \\
   -i %(PREFIX)s_hits.lst \\
@@ -148,7 +151,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 partialator \\
     -i %(PREFIX)s_hits.stream \\
@@ -165,7 +168,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 check_hkl \\
     %(PREFIX)s_merged.hkl \\
@@ -181,7 +184,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 compare_hkl \\
     %(PREFIX)s_merged.hkl1 \\
@@ -199,7 +202,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 cell_explorer %(PREFIX)s.stream
 """
