@@ -39,7 +39,9 @@ setup(name="EXtra-xwiz",
               "xwiz-cell-checker = extra_xwiz.cell_check:main",
               "xwiz-collector = extra_xwiz.collector:main",
               "xwiz-powder = extra_xwiz.powder:main",
-              "xwiz-workflow = extra_xwiz.workflow:main"
+              "xwiz-workflow = extra_xwiz.workflow:main",
+              "xwiz-mask-hd52geom = extra_xwiz.mask_converter.mask_hd52geom:main",
+              "xwiz-mask-geom2hd5 = extra_xwiz.mask_converter.mask_geom2hd5:main"
           ],
       },
       install_requires=[

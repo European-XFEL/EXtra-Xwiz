@@ -305,7 +305,7 @@ def cell_as_string(cell_file):
     """
     cell_string = '{:20}'.format(cell_file)
     if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
-        cell_info = re.findall('( = )([^\s]+)', open(cell_file).read())
+        cell_info = re.findall(r'( = )([^\s]+)', open(cell_file).read())
         cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
     elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
         cell_info = open(cell_file).read().splitlines()[0].split()[1:]

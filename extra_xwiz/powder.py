@@ -4,8 +4,12 @@ import h5py as h5
 import multiprocessing as mp
 import numpy as np
 import re
+import subprocess
 import sys
 import time
+
+from . import config
+from .templates import HDFSEE_WRAP
 
 '''
     idx = np.arange(numFrames, dtype=np.int32)
@@ -17,10 +21,9 @@ import time
     for n in range(poolSize):
         args.append([VDS_filename, chunks[n]])
 
-'''
-
 poolSize = mp.cpu_count() - 1
 print('Number of available cores:', poolSize)
+'''
 
 def read_size_from_file(fn):
     with h5.File(fn, 'r') as f:
@@ -31,7 +34,7 @@ def read_size_from_file(fn):
 
 def pix_max_over_frames(fn, n_frames):
     if (n_frames % 1000) == 0:
-        n_chunks = n_frames / 1000
+        n_chunks = int(n_frames / 1000)
     else: 
         n_chunks = n_frames // 1000 + 1
     print(f'will find max in {n_chunks} chunks.')
@@ -43,7 +46,12 @@ def pix_max_over_frames(fn, n_frames):
             low = 1000 * i
             high = min(1000 * (i+1), n_frames)
             t1 = time.time()
-            data = _data[low:high]  # instantiation of array
+            # data = _data[low:high]  # instantiation of array
+            data = np.zeros((high-low,) + _data.shape[1:], dtype=_data.dtype)
+            k = 0
+            for j in range(low, high):
+                data[k] = _data[j]
+                k += 1
             t2 = time.time()
             print(f'sub-max for range {low:5d} to {high:5d}') 
             _px_max.append(np.max(data, axis=0))
@@ -54,6 +62,7 @@ def pix_max_over_frames(fn, n_frames):
     print('maxing finished.')
     return px_max
 
+
 def write_hdf5(data, fn):
     data = np.expand_dims(data, axis=0)
     print('output data', data.shape)
@@ -61,13 +70,27 @@ def write_hdf5(data, fn):
         ds = f.create_dataset('entry_1/data_1/data', data=data)
     print('writing finished.')
 
+
+def display_hdf5(fn, geom):
+    with open('_hdfsee.sh', 'w') as f:
+        f.write(HDFSEE_WRAP % {'DATA_FILE': fn, 'GEOM': geom })
+    subprocess.check_output(['sh', '_hdfsee.sh'])
+
+
 def main(argv=None):
     ap = ArgumentParser(prog='powder.py')
     ap.add_argument('vds_in', help='input VDS file name (multi-frame data)')
     ap.add_argument('h5_out', help='output HDF5 file name (virtual powder image)')
     args = ap.parse_args(argv)
 
+    conf = config.load_from_file()
     n_frames = read_size_from_file(args.vds_in)
+    max_frames = conf['data']['n_frames']
+    geom = conf['geom']['file_path']
+    if max_frames < n_frames:
+        print(f' truncation to {max_frames} frames.')
+    n_frames = int(min(n_frames, max_frames))
     max_data = pix_max_over_frames(args.vds_in, n_frames)
     write_hdf5(max_data, args.h5_out)
+    display_hdf5(args.h5_out, geom)
 
