@@ -71,9 +71,13 @@ def write_hdf5(data, fn):
     print('writing finished.')
 
 
-def display_hdf5(fn, geom):
+def display_hdf5(fn, geom, crystfel_version):
     with open('_hdfsee.sh', 'w') as f:
-        f.write(HDFSEE_WRAP % {'DATA_FILE': fn, 'GEOM': geom })
+        f.write(HDFSEE_WRAP % {
+            'CRYSTFEL_VER': crystfel_version,
+            'DATA_FILE': fn,
+            'GEOM': geom
+        })
     subprocess.check_output(['sh', '_hdfsee.sh'])
 
 
@@ -85,6 +89,7 @@ def main(argv=None):
 
     conf = config.load_from_file()
     n_frames = read_size_from_file(args.vds_in)
+    crystfel_version = conf['crystfel']['version']
     max_frames = conf['data']['n_frames']
     geom = conf['geom']['file_path']
     if max_frames < n_frames:
@@ -92,5 +97,5 @@ def main(argv=None):
     n_frames = int(min(n_frames, max_frames))
     max_data = pix_max_over_frames(args.vds_in, n_frames)
     write_hdf5(max_data, args.h5_out)
-    display_hdf5(args.h5_out, geom)
+    display_hdf5(args.h5_out, geom, crystfel_version)
 

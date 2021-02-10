@@ -1,4 +1,6 @@
-"""Module to convert mask from geometry file to HD5 file."""
+"""
+Module to convert mask from the geometry to HD5 file.
+"""
 
 # Standard library imports
 from argparse import ArgumentParser
@@ -7,11 +9,16 @@ import warnings
 # Local imports
 from . import detector_info as di
 from . import mask_converter as mc
-from . import mask_exceptions as mce
 
 
 def main(argv=None):
-    """Function to be called by the egg entrypoint."""
+    """
+    Function to be called by the egg entrypoint to convert mask from
+    the geometry to HD5 file.
+
+    Args:
+        argv (string, optional): arguments string. Defaults to None.
+    """
 
     parser = ArgumentParser(
         prog="xwiz-mask-geom2hd5",
@@ -36,7 +43,7 @@ def main(argv=None):
         default='replace',
         dest='write_mode',
         help="Overwrite existing mask in HD5 file (if any) with "
-             "converted mask, default behaviour."
+             "converted mask, default behavior."
     )
     write_mode_group.add_argument(
         "-a", "--add",
@@ -49,13 +56,13 @@ def main(argv=None):
     parser.add_argument(
         "-d", "--detector",
         choices=di.detector_info.keys(),
-        default=None,
+        required=True,
         help="Detector used in the experiment."
     )
     parser.add_argument(
         "-t", "--type",
         choices=di.get_data_types(),
-        default=None,
+        required=True,
         help="Type of the data stored in HD5 file."
     )
 
@@ -78,23 +85,15 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    # Format warnings:
-    warnings.formatwarning = lambda msg, *args, **kwargs: f'{msg}'
-    warnings.simplefilter("always")
-
-    try:
-        converter = mc.MaskConverter(
-            args.output_hd5,
-            args.input_geo,
-            'geom2hd5',
-            args.write_mode,
-            args.path_hd5,
-            args.entry_hd5,
-            args.detector,
-            args.type,
-            args.invert
-        )
-        converter.convert()
-    except mce.MaskConvError as err:
-        print(err.message)
-        exit(1)
+    converter = mc.MaskConverter(
+        args.output_hd5,
+        args.input_geo,
+        'geom2hd5',
+        args.write_mode,
+        args.path_hd5,
+        args.entry_hd5,
+        args.detector,
+        args.type,
+        args.invert
+    )
+    converter.convert()

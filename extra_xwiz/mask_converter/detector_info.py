@@ -5,7 +5,7 @@ import numpy as np
 
 
 detector_info = {
-    'Jungfrau': {
+    'JF4M': {
         'VDS': {
             'shape': (8, 512, 1024),
 
@@ -49,7 +49,7 @@ detector_info = {
         }
     },
 
-    'AGIPD': {
+    'AGIPD1M': {
         'VDS': {
             'shape': (16, 512, 128),
 
@@ -90,19 +90,25 @@ detector_info = {
 
 def get_data_types(detector_names=None):
     """
-    Prepare a list with all data types available in detector_info
-    for <detector_names>.
+    Prepare a set of all data types available in detector_info for
+    detectors listed in detector_names (or all available detectors if
+    detector_names not provided).
+
+    Args:
+        detector_names (list, optional): list of detector names.
+            Defaults to None.
+
+    Returns:
+        set: set of data types.
     """
 
     if detector_names is not None:
         detectors = detector_names
     else:
-        detectors = list(detector_info.keys())
+        detectors = detector_info.keys()
 
-    data_types = []
+    data_types = set()
     for detector in detectors:
-        for data_type in detector_info[detector].keys():
-            if data_type not in data_types:
-                data_types.append(data_type)
+        data_types.update(detector_info[detector].keys())
 
     return data_types
