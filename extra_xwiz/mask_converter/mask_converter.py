@@ -15,7 +15,7 @@ import numpy as np
 # Local imports
 from . import decomposition as dc
 from . import detector_info as di
-from . import mask_exceptions as mce
+from . import mask_utilities as mu
 
 
 class MaskConverter:
@@ -25,7 +25,28 @@ class MaskConverter:
 
     def __init__(self, hd5file, geofile, run_mode, write_mode,
                  hd5path, hd5entry, detector, data_type, invert):
-        """Construct a mask converter."""
+        """
+        Construct a mask converter with provided parameters.
+
+        Args:
+            hd5file (string): relative or absolute path to the HD5 file.
+            geofile (string): relative or absolute path to the geometry file.
+            run_mode (string): mode of the mask converter operation.
+            write_mode (string): mode of writing to the existing file.
+            hd5path (string): path to the mask in HD5 file.
+            hd5entry (int): entry number of the mask in HD5 file.
+            detector (string): name of the detector.
+            data_type (string): type of the detector data.
+            invert (bool): invert the mask after reading from of before
+                writing to the HD5 file.
+
+        Raises:
+            KeyError: unexpected run mode.
+            KeyError: unexpected write mode.
+            KeyError: detector name missing in the detector_info keys.
+            KeyError: data type missing in detector_info for specified
+                detector.
+        """
 
         self._hd5file = hd5file
         self._hd5path = hd5path
@@ -37,28 +58,19 @@ class MaskConverter:
         self._data_type = data_type
         self._invert = invert
 
-        if self._detector is None or self._data_type is None:
-            self._guess_detector_info()
-
-        if self._run_mode not in type(self).modes_avail:
-            raise mce.MaskConvError(
-                f"ERROR: Unknown MaskConverter run mode: "
-                f"{self._run_mode}.",
-                'conv_init_wrong_mode')
-        if self._write_mode not in type(self).write_modes:
-            raise mce.MaskConvError(
-                f"ERROR: Unknown MaskConverter write mode: "
-                f"{self._write_mode}.",
-                'conv_init_wrong_mode')
+        if self._run_mode not in self.modes_avail:
+            raise KeyError(
+                f"Unknown MaskConverter run mode: {self._run_mode}.")
+        if self._write_mode not in self.write_modes:
+            raise KeyError(
+                f"Unknown MaskConverter write mode: {self._write_mode}.")
         if self._detector not in di.detector_info.keys():
-            raise mce.MaskConvError(
-                f"ERROR: Unknown detector: {self._detector}.",
-                'conv_init_unknown_detector')
+            raise KeyError(
+                f"Unknown detector: {self._detector}.")
         if self._data_type not in di.detector_info[self._detector].keys():
-            raise mce.MaskConvError(
-                f"ERROR: Missing info on '{self._data_type}' "
-                f"data type for detector {self._detector}.",
-                'conv_init_missing_data_type')
+            raise KeyError(
+                f"Missing info on '{self._data_type}' data type for "
+                f"detector {self._detector}.")
 
         self._det_info = di.detector_info[self._detector][self._data_type]
 
@@ -66,247 +78,112 @@ class MaskConverter:
 
     @property
     def mask(self):
-        """Mask as numpy array accessible from outside."""
+        """
+        Provides a copy of the detector mask.
+
+        Returns:
+            np.array: Detector mask as a 2D boolean numpy array.
+        """
         return np.copy(self.__mask)
 
     def convert(self):
+        """
+        Convert detector mask and write to the output file.
+        """
         self._convert_mask()
         self._write_mask()
 
-    def _guess_detector_info(self):
-        """
-        Try to guess detector and data type if not provided by the user.
-        """
-
-        detectors = []
-        data_types = []
-        str_search_info_detector = ""
-        str_search_info_data_type = ""
-
-        if self._detector is None:
-            detectors = list(di.detector_info.keys())
-            str_search_info_detector = "detector name"
-        else:
-            detectors.append(self._detector)
-
-        if self._data_type is None:
-            data_types = di.get_data_types(detectors)
-            if str_search_info_detector:
-                str_search_info_data_type += " and"
-            str_search_info_data_type += " data type"
-        else:
-            data_types.append(self._data_type)
-
-        fits_di = np.zeros((len(detectors), len(data_types)), dtype=bool)
-        fits_hd5 = np.copy(fits_di)
-        fits_geo_detectors = np.zeros((len(detectors), 1), dtype=bool)
-        fits_geo_data_types = np.zeros((1, len(data_types)), dtype=bool)
-
-        # Check available information in detector_info
-        for i_d, detector in enumerate(detectors):
-            if detector in di.detector_info.keys():
-                for i_t, data_type in enumerate(data_types):
-                    if data_type in di.detector_info[detector].keys():
-                        fits_di[i_d, i_t] = True
-
-        # Compare mask shapes to the mask in HD5 file, if any
-        try:
-            with h5py.File(self._hd5file, 'r') as f_hd5:
-                hd5_mask = f_hd5.get(self._hd5path)
-                hd5_mask_shape = hd5_mask.shape
-                hd5_mask_ndim = hd5_mask.ndim
-        except (OSError, TypeError):
-            # In case mask could not be read from HDF5 - do nothing
-            pass
-        else:
-            for i_d, detector in enumerate(detectors):
-                for i_t, data_type in enumerate(data_types):
-                    mask_shape = di.detector_info[detector][data_type]['shape']
-                    if all([
-                        fits_di[i_d, i_t],
-                        hd5_mask_shape[-len(mask_shape):] == mask_shape,
-                        hd5_mask_ndim <= (len(mask_shape) + 1)
-                    ]):
-                        fits_hd5[i_d, i_t] = True
-
-        # Check geometry file, if any
-        # 'True' for detector or data type provided by user
-        if self._detector is not None:
-            fits_geo_detectors[detectors.index(self._detector)] = True
-        if self._data_type is not None:
-            fits_geo_data_types[data_types.index(self._data_type)] = True
-
-        # Help function to prevent repeated code of re.search
-        def geo_re_search(str_in):
-            for i_d, detector in enumerate(detectors):
-                if re.search(detector, str_in, re.IGNORECASE) is not None:
-                    fits_geo_detectors[i_d, 0] = True
-            for i_t, data_type in enumerate(data_types):
-                if re.search(data_type, str_in, re.IGNORECASE) is not None:
-                    fits_geo_data_types[0, i_t] = True
-
-        # Match geometry file name
-        geo_re_search(self._geofile)
-        fits_geo = np.dot(fits_geo_detectors, fits_geo_data_types)
-
-        if np.count_nonzero(fits_geo) != 1:
-            # Search geometry file content
-            if os.path.exists(self._geofile):
-                with open(self._geofile, 'r') as f_geo:
-                    geo_data = f_geo.read().replace('\n', ' ')
-                    geo_re_search(geo_data)
-
-            fits_geo = np.dot(fits_geo_detectors, fits_geo_data_types)
-
-        # Gather search results
-        fits_AND = np.logical_and(fits_di,
-                                  np.logical_and(fits_hd5, fits_geo))
-        fits_OR = np.logical_and(fits_di,
-                                 np.logical_or(fits_hd5, fits_geo))
-        str_found_in = ""
-
-        if np.count_nonzero(fits_AND) == 1:
-            fits_res = fits_AND
-        elif np.count_nonzero(fits_OR) == 1:
-            fits_res = fits_OR
-        else:
-            raise mce.MaskConvError(
-                f"ERROR: {str_search_info_detector}"
-                f"{str_search_info_data_type} could not be "
-                f"guessed from the HD5 or geometry file.",
-                'cannot_guess_detector_info')
-
-        i_detector, j_data_type = np.transpose(np.nonzero(fits_res))[0]
-        self._detector = detectors[i_detector]
-        if str_search_info_detector:
-            str_search_info_detector += f" as {detectors[i_detector]}"
-        self._data_type = data_types[j_data_type]
-        if str_search_info_data_type:
-            str_search_info_data_type += f" as {data_types[j_data_type]}"
-
-        if np.count_nonzero(fits_hd5) == 1:
-            str_found_in = "HD5 file"
-        elif np.count_nonzero(fits_geo) == 1:
-            str_found_in = "geometry file"
-        else:
-            str_found_in = "HD5 and geometry files"
-
-        warnings.warn(f"INFO: Estimated {str_search_info_detector}"
-                      f"{str_search_info_data_type} from the information "
-                      f"in {str_found_in}.")
-
     def _read_mask_hd5(self):
-        """Read mask from the hdf5 file to numpy array."""
+        """
+        Read mask from the HD5 file to boolean numpy array.
+
+        Returns:
+            np.array: Detector mask as a 2D boolean numpy array.
+        """
 
         res_mask = None
         mask_shape = self._det_info['shape']
 
-        try:
-            with h5py.File(self._hd5file, 'r') as f_hd5:
-                hd5mask = f_hd5.get(self._hd5path)
+        with h5py.File(self._hd5file, 'r') as f_hd5:
+            hd5mask = f_hd5.get(self._hd5path)
 
-                # Chack shape of the HDF5 mask
-                mce.MaskConvError.check_hd5mask(
-                    hd5mask, mask_shape, self._hd5entry)
+            # Check shape of the HDF5 mask
+            mu.check_hd5mask(hd5mask, mask_shape, self._hd5entry)
 
-                # Remove 'n_data' dimension, convert to np.array
-                if hd5mask.ndim > len(mask_shape):
-                    hd5mask = hd5mask[self._hd5entry]
-                else:
-                    hd5mask = np.array(hd5mask)
-        # Catch an exception if HDF5 file cannot be accessed
-        except OSError as err:
-            err_file, err_n, err_mes = re.search(
-                r".*?name = '(.*?)'"
-                r".*?errno = (.*?),"
-                r".*?error message = '(.*?)'",
-                err.args[0]).groups()
-            if err_n == '2':
-                raise mce.MaskConvError(
-                    f"ERROR: {err_mes} : {err_file}.",
-                    'read_hd5_cannot_access_file') from err
+            # Remove 'n_data' dimension, convert to np.array
+            if hd5mask.ndim > len(mask_shape):
+                hd5mask = hd5mask[self._hd5entry]
             else:
-                raise
-        # Catch an exception of missing path in HDF5 file
-        except TypeError as err:
-            if 'NoneType' in err.args[0]:
-                raise mce.MaskConvError(
-                    f"ERROR: Could not read '{self._hd5path}' "
-                    f"from '{self._hd5file}'.",
-                    'read_hd5_wrong_path') from err
-            else:
-                raise
-        else:
-            # Convert mask values to True (masked) and False
-            res_mask = self._det_info['read_mask'](hd5mask)
+                hd5mask = np.array(hd5mask)
 
-            if self._invert:
-                res_mask = np.logical_not(res_mask)
+        # Convert mask values to True (masked) and False
+        res_mask = self._det_info['read_mask'](hd5mask)
+
+        if self._invert:
+            res_mask = np.logical_not(res_mask)
 
         return res_mask
 
     def _read_mask_geo(self):
-        """Read mask from the geometry file to rectangles dictionary."""
+        """
+        Read mask from the geometry file to the dictionary of rectangles
+        (in the same format as in the geometry file).
+
+        Raises:
+            ValueError: mask panel description not expected for the
+                specified data type.
+            ValueError: mask panel description does not suit specified
+                detector and data type.
+
+        Returns:
+            dict: dictionary of rectangles (in the same format as in the
+            geometry file) representing masked regions.
+        """
 
         res_dict = {}
         bad_dict = {}
 
-        try:
-            f_geo = open(self._geofile, 'r')
-        # Catch file not found exception:
-        except FileNotFoundError as err:
-            if err.args[0] == 2:
-                raise mce.MaskConvError(
-                    f"ERROR: No such geomentry file: {self._geofile}.",
-                    'read_geo_no_file') from err
-            else:
-                raise
-        else:
-            with f_geo:
-                for line in f_geo:
-                    # To ignore comments:
-                    line = line.partition(';')[0].rstrip()
+        with open(self._geofile, 'r') as f_geo:
+            for line in f_geo:
+                # To ignore comments:
+                line = line.partition(';')[0].rstrip()
 
-                    m_obj = re.search(r"bad_(.+)/(\S+)\s*=\s*(\S+)", line)
-                    if m_obj is not None:
-                        area, var, val = m_obj.groups()
-                        if area not in bad_dict.keys():
-                            bad_dict[area] = {
-                                'min_fs': -1,
-                                'max_fs': -1,
-                                'min_ss': -1,
-                                'max_ss': -1,
-                                'panel': 'all'
-                            }
-                        if var == 'panel':
-                            bad_dict[area][var] = val
+                m_obj = re.search(r"bad_(.+)/(\S+)\s*=\s*(\S+)", line)
+                if m_obj is not None:
+                    area, var, val = m_obj.groups()
+                    if area not in bad_dict.keys():
+                        bad_dict[area] = {
+                            'min_fs': -1,
+                            'max_fs': -1,
+                            'min_ss': -1,
+                            'max_ss': -1,
+                            'panel': 'all'
+                        }
+                    if var == 'panel':
+                        bad_dict[area][var] = val
 
-                            # Check whether panel value is expected
-                            if len(self._det_info['shape']) != 3:
-                                raise mce.MaskConvError(
-                                    f"ERROR: Geometry file - panel "
-                                    f"description ({val}) not expected "
-                                    f"for {self._data_type} data.",
-                                    'read_geo_wrong_panel')
+                        # Check whether panel value is expected
+                        if len(self._det_info['shape']) != 3:
+                            raise ValueError(
+                                f"Panel description ({val}) not expected "
+                                f"for {self._data_type} data.")
 
-                            # Check <val> to be suitable description
-                            # of a panel and asic
-                            m_obj = re.match(r"(p\d+)(a\d+)", val)
-                            if (m_obj is None
-                                or m_obj.group(1) not in
-                                    self._det_info['panel_names']
-                                or m_obj.group(2) not in
-                                    self._det_info['asic_names']):
-                                raise mce.MaskConvError(
-                                    f"ERROR: Geometry file - not suitable "
-                                    f"panel description: {val}.",
-                                    'read_geo_wrong_panel')
-                        elif var in bad_dict[area].keys():
-                            bad_dict[area][var] = int(val)
-                        else:
-                            warnings.warn(
-                                f"WARNING: Geometry file - unsupported "
-                                f"mask variable: {var} in bad_{area}.")
+                        # Check <val> to be suitable description
+                        # of a panel and asic
+                        m_obj = re.match(r"(p\d+)(a\d+)", val)
+                        if (m_obj is None
+                            or m_obj.group(1) not in
+                                self._det_info['panel_names']
+                            or m_obj.group(2) not in
+                                self._det_info['asic_names']):
+                            raise ValueError(
+                                f"Not suitable panel description: {val}.")
+                    elif var in bad_dict[area].keys():
+                        bad_dict[area][var] = int(val)
+                    else:
+                        warnings.warn(
+                            f"Geometry file - unsupported mask variable: "
+                            f"{var} in bad_{area}.")
 
         # Check if rectangle information is complete
         i = 0
@@ -321,13 +198,14 @@ class MaskConverter:
                 i += 1
             else:
                 warnings.warn(
-                    f"WARNING: Geometry file - incomplete information "
-                    f"for bad_{area}.")
+                    f"Geometry file - incomplete information for bad_{area}.")
 
         return res_dict
 
     def _read_mask(self):
-        """Read mask from hdf5 or geometry file, depending on mode."""
+        """
+        Read mask from the HD5 or geometry file, depending on mode.
+        """
 
         self.__mask = np.zeros(self._det_info['shape'], dtype=bool)
         self.__rect = {}
@@ -338,7 +216,7 @@ class MaskConverter:
             # Reduce mask in case of write option 'add'
             if self._write_mode == 'add' and os.path.exists(self._geofile):
                 self.__rect = self._read_mask_geo()
-                reduce_mask = self._convert_rectd2ndarr()
+                reduce_mask = self._convert_rectd2nparr()
                 self.__mask = np.logical_and(self.__mask,
                                              np.logical_not(reduce_mask))
                 self.__rect = {}
@@ -351,26 +229,17 @@ class MaskConverter:
                     and os.path.exists(self._hd5file)):
                 self.__mask = self._read_mask_hd5()
 
-    def _convert_ndarr2rectd(self):
-        """Convert mask from numpy array to rectangles dictionary."""
+    def _convert_nparr2rectd(self):
+        """
+        Convert mask from the 2D boolean numpy array to the dictionary
+        of rectangles (in the same format as in the geometry file).
+
+        Returns:
+            dict: Dictionary of rectangles (in the same format as in the
+            geometry file) representing masked regions.
+        """
 
         res_dict = {}
-
-        # Help function to turn decomposition algorithm output into a
-        # rectangles dictionary
-        def rect2dict(rect, panel):
-            d = {}
-            rect2dict.n_area = getattr(rect2dict, 'n_area', -1)
-            for rec in rect:
-                rect2dict.n_area += 1
-                d[rect2dict.n_area] = {
-                    'min_fs': rec[0][0],
-                    'max_fs': rec[0][1] - 1,  # Mask range is inclusive
-                    'min_ss': rec[1][0],
-                    'max_ss': rec[1][1] - 1,  # Mask range is inclusive
-                    'panel': panel
-                }
-            return d
 
         # First check for regions to be excluded in all panels:
         if self.__mask.ndim == 3:
@@ -382,7 +251,7 @@ class MaskConverter:
 
         is_panel_all_empty = np.array_equiv(panel_all, False)
         if not is_panel_all_empty:
-            res_dict.update(rect2dict(dc.gdm(panel_all), 'all'))
+            res_dict.update(mu.rect2dict(dc.delta_method(panel_all), 'all'))
 
         if self.__mask.ndim == 3:
             panels = self._det_info['panel_names']
@@ -404,13 +273,19 @@ class MaskConverter:
                     asic_j[asic_range[i][j]] = True
                     panel_i_asic_j = np.logical_and(panel_i, asic_j)
                     res_dict.update(
-                        rect2dict(dc.gdm(panel_i_asic_j),
-                                  f"{panels[i]}{asics[j]}"))
+                        mu.rect2dict(dc.delta_method(panel_i_asic_j),
+                                     f"{panels[i]}{asics[j]}"))
 
         return res_dict
 
-    def _convert_rectd2ndarr(self):
-        """Convert mask from rectangles dictionary to numpy array."""
+    def _convert_rectd2nparr(self):
+        """
+        Convert mask from the dictionary of rectangles (same format as
+        in the geometry file) to the 2D boolean numpy array.
+
+        Returns:
+            np.array: Detector mask as a 2D boolean numpy array.
+        """
 
         shape = self._det_info['shape']
         res_mask = np.zeros(shape, dtype=bool)
@@ -427,7 +302,7 @@ class MaskConverter:
                     res_mask[slice_ss, slice_fs] = True
             else:
                 assert len(shape) == 3, (
-                    "Convert rectd2ndarr: mask has to be dimensions 3 to "
+                    "Convert rectd2nparr: mask has to be dimensions 3 to "
                     "apply rectangles per panel.")
 
                 panel, asic = re.match(
@@ -448,15 +323,19 @@ class MaskConverter:
         return res_mask
 
     def _convert_mask(self):
-        """Convert mask depending on mode."""
+        """
+        Convert the mask, depending on mode.
+        """
         if self._run_mode == "hd52geom":
-            self.__rect = self._convert_ndarr2rectd()
+            self.__rect = self._convert_nparr2rectd()
         elif self._run_mode == "geom2hd5":
-            rect_mask = self._convert_rectd2ndarr()
+            rect_mask = self._convert_rectd2nparr()
             self.__mask = np.logical_or(self.__mask, rect_mask)
 
     def _write_mask_hd5(self):
-        """Write converted mask to the HD5 file."""
+        """
+        Write converted mask to the HD5 file.
+        """
 
         mask_shape = self.__mask.shape
         mask_tmp = self.__mask
@@ -464,38 +343,24 @@ class MaskConverter:
             mask_tmp = np.logical_not(mask_tmp)
         mask_to_write = self._det_info['write_mask'](mask_tmp)
 
-        try:
-            with h5py.File(self._hd5file, 'a') as f_hd5:
-                if self._hd5path in f_hd5:
-                    hd5mask = f_hd5[self._hd5path]
+        with h5py.File(self._hd5file, 'a') as f_hd5:
+            if self._hd5path in f_hd5:
+                hd5mask = f_hd5[self._hd5path]
 
-                    # Check shape of the existing HDF5 mask
-                    mce.MaskConvError.check_hd5mask(
-                        hd5mask, mask_shape, self._hd5entry)
+                # Check shape of the existing HDF5 mask
+                mu.check_hd5mask(hd5mask, mask_shape, self._hd5entry)
 
-                    if hd5mask.ndim > len(mask_shape):
-                        hd5mask[self._hd5entry] = mask_to_write
-                    else:
-                        hd5mask[...] = mask_to_write
+                if hd5mask.ndim > len(mask_shape):
+                    hd5mask[self._hd5entry] = mask_to_write
                 else:
-                    f_hd5.create_dataset(self._hd5path, data=mask_to_write)
-        # Catch exception in case of no write permission to the file
-        # TODO: Test also with VDS file
-        except OSError as err:
-            err_file, err_n = re.search(
-                r".*?name = '(.*?)'"
-                r".*?errno = (.*?)",
-                err.args[0]).groups()
-            if err_n == '17':
-                raise mce.MaskConvError(
-                    f"ERROR: Could not open '{err_file}' for "
-                    f"writing - check file permissions.",
-                    'write_hd5_no_permission') from err
+                    hd5mask[...] = mask_to_write
             else:
-                raise
+                f_hd5.create_dataset(self._hd5path, data=mask_to_write)
 
     def _write_mask_geo(self):
-        """Write converted mask to the geometry file."""
+        """
+        Write converted mask to the geometry file.
+        """
 
         text_before = text_after = []
         n_area_start = 0
@@ -509,13 +374,13 @@ class MaskConverter:
             for i, line in enumerate(contents):
 
                 # Search for the mask information
-                if re.search(r"bad_", line) is not None:
+                if "bad_" in line:
                     idx_write = i + 1
 
                     # Comment existing mask for the 'replace' mode
                     if all([
                         self._write_mode == 'replace',
-                        re.search(r"bad_", line.partition(';')[0]) is not None
+                        "bad_" in line.partition(';')[0]
                     ]):
                         contents[i] = "; " + line
 
@@ -529,7 +394,7 @@ class MaskConverter:
                 # (to put mask before it in case no 'bad_' area found)
                 if all([
                     idx_write == len(contents),
-                    re.search(r"rigid_group", line) is not None
+                    "rigid_group" in line
                 ]):
                     idx_write = i
 
@@ -555,21 +420,14 @@ class MaskConverter:
 
         text_write = "".join(text_before + text_mask + text_after)
 
-        try:
-            with open(self._geofile, 'w') as f_geo:
-                f_geo.write(text_write)
-        # Catch exception in case of no write permission to the file
-        except PermissionError as err:
-            if err.args[0] == 13:
-                raise mce.MaskConvError(
-                    f"ERROR: Could not open '{self._geofile}' "
-                    f"for writing - check file permissions.",
-                    'write_geo_no_permission') from err
-            else:
-                raise
+        with open(self._geofile, 'w') as f_geo:
+            f_geo.write(text_write)
 
     def _write_mask(self):
-        """Write the mask depending on mode."""
+        """
+        Write converted mask to the HD5 or geometry file, depending on mode.
+        """
+        # Write the mask depending on mode.
         if self._run_mode == "hd52geom":
             self._write_mask_geo()
         elif self._run_mode == "geom2hd5":

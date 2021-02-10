@@ -213,7 +213,7 @@ source /usr/share/Modules/init/sh
 
 module load exfel
 module load spack
-spack load crystfel@0.8.0
+spack load crystfel@%(CRYSTFEL_VER)s
 
 hdfsee %(DATA_FILE)s -g %(GEOM)s
 """

@@ -1,5 +1,5 @@
 """
-Internal module with functions for rectangular decomposition
+Internal module with a function for rectangular decomposition
 of binary images based on paper:
 http://library.utia.cas.cz/separaty/2012/ZOI
 /suk-rectangular%20decomposition%20of%20binary%20images.pdf
@@ -9,20 +9,28 @@ http://library.utia.cas.cz/separaty/2012/ZOI
 import numpy as np
 
 
-def gdm(A_inp):
+def delta_method(mask):
     """
-    Generalized delta-method algorithm to decompose binary image
-    (numpy array) into rectangles.
-        Input:
-            Ainp - two-dimensional boolean numpy array.
-        Output:
-            List of rectangles - [((x_min, x_max),(y_min, y_max)), ...]
-    """
-    # Check input:
-    if A_inp.ndim != 2:
-        raise ValueError(f"Dimension mismatch - {A_inp.ndim}, expected 2.")
+    Generalized delta-method algorithm to decompose two-dimensional mask
+    (boolean numpy array) into rectangles.
 
-    A = np.copy(A_inp)
+    Args:
+        mask (2D np.array, dtype=bool): input mask.
+
+    Raises:
+        ValueError: mask is not a 2D boolean numpy array.
+
+    Returns:
+        list: list of rectangles that represent masked regionsin in the form:
+            [((x_min, x_max),(y_min, y_max)), ...]
+    """
+
+    # Check input:
+    if (mask.ndim != 2
+            or mask.dtype != bool):
+        raise ValueError(f"Expected input - 2D boolean numpy array.")
+
+    A = np.copy(mask)
     res = []
 
     i_y = 0
