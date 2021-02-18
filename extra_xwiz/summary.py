@@ -73,7 +73,7 @@ def report_cells(prefix, cell_strings):
             f.write(string)
 
 
-def report_merging_metrics(prefix):
+def report_merging_metrics(part_dir, prefix):
     """Report overall (un-binned) crystallographic figures-of-merit
     """
     labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
@@ -85,7 +85,7 @@ def report_merging_metrics(prefix):
                                    'ccstar', 'rsplit']):
             cw = [1, 1, 2, 2, 2][i]  # column index for n_reflections = weight
             cf = [3, 6, 1, 1, 1][i]  # column index for respective FOM value
-            with open(f'{prefix}_{table}.dat', 'r') as fd:
+            with open(f'{part_dir}/{prefix}_{table}.dat', 'r') as fd:
                 data_lines = fd.readlines()[1:]
             w_sum = 0.0
             f_sum = 0.0

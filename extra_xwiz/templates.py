@@ -118,33 +118,6 @@ indexamajig \\
   --no-non-hits-in-stream
 """
 
-PROC_BASH_DIRECT = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
-
-module load ccp4/7.0
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
-
-indexamajig \\
-  -i %(PREFIX)s_hits.lst \\
-  -o %(PREFIX)s_hits.stream \\
-  -g %(GEOM)s \\
-  %(CRYSTAL)s \\
-  -j %(CORES)s \\
-  --highres=%(RESOLUTION)s \\
-  --peaks=%(PEAK_METHOD)s \\
-  --min-snr=%(PEAK_SNR)s \\
-  --threshold=%(PEAK_THRESHOLD)s \\
-  --min-pix-count=%(PEAK_MIN_PX)s \\
-  --indexing=%(INDEX_METHOD)s \\
-  --copy-hdf5-field=/entry_1/pulseId \\
-  --copy-hdf5-field=/entry_1/trainId \\
-  --no-non-hits-in-stream \\
-  --int-radius=%(INT_RADII)s
-"""
-
 PARTIALATOR_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
