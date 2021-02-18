@@ -5,6 +5,7 @@ from glob import glob
 import h5py
 import numpy as np
 from scipy.optimize import curve_fit
+import shutil
 import subprocess
 import os, re, time
 import warnings
@@ -133,7 +134,8 @@ def calc_progress(out_logs, n_total, crystfel_version):
         print_crystfel_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
 
 
-def wait_or_cancel(job_id, n_nodes, n_total, time_limit, crystfel_version):
+def wait_or_cancel(job_id, job_dir, n_nodes, n_total, time_limit,
+                   crystfel_version):
     """ Loop until queue is empty or time-limit reached
     """
     print(' Waiting for job-array', job_id)
@@ -141,7 +143,7 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit, crystfel_version):
     # wait until at least one allocated job has passed queueing stage
     while len(out_logs) == 0:
         time.sleep(5)
-        out_logs = glob(f'slurm-{job_id}_*.out')
+        out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
         # This may never happen if array of jobs is submitted. 
         # ARRAY_ID = 0 may be finished before the last ID starts
     max_time = '0:00'
@@ -157,27 +159,6 @@ def wait_or_cancel(job_id, n_nodes, n_total, time_limit, crystfel_version):
         except ValueError:
             # if for some reason the list 'times' is empty
             max_time = '0:00'
-        calc_progress(out_logs, n_total, crystfel_version)
-        time.sleep(2)
-    # to ensure a full bar after all tasks have finished.
-    calc_progress(out_logs, n_total, crystfel_version)
-    print()
-
-
-def wait_single(job_id, n_total, crystfel_version):
-    """ Loop until queue is empty (single non-array SLURM job)
-    """
-    print(' Waiting for job', job_id)
-    out_logs = [f'slurm-{job_id}.out']
-    # wait until the one allocated job has passed queueing stage
-    while not os.path.exists(f'slurm-{job_id}.out'):
-        time.sleep(2)
-    n_tasks = 1
-    # wait until task has finished, hence vanished from the squeue list
-    while n_tasks > 0:
-        queue = subprocess.check_output(['squeue', '-u', getuser()])
-        tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
-        n_tasks = len(tasks)
         calc_progress(out_logs, n_total, crystfel_version)
         time.sleep(2)
     # to ensure a full bar after all tasks have finished.
@@ -354,3 +335,72 @@ def scan_cheetah_proc_dir(path):
             n_frames += data.shape[0]
             samples.append(j)
     return n_files, (n_frames / len(samples))
+
+
+def remove_path(path):
+    """
+    Remove entry if it is a file, symbolic link or directory.
+
+    Args:
+        path (string): absolute or relative path to the entry to be removed.
+
+    Raises:
+        ValueError: path is not a file, symbolic link or directory.
+    """
+    if os.path.exists(path):
+        if os.path.isfile(path) or os.path.islink(path):
+            os.unlink(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            raise ValueError(
+                f"Path '{path}' is not a file, symbolic link or directory.")
+
+def make_link(src, dst, target_is_directory=False):
+    """
+    Prepare symbolic link to src at dst if dst is a folder or does not
+    exist yet.
+
+    Args:
+        src (string): path to the entry to be linked.
+        dst (string): destination for the symbolic link, directory or
+            non-existing path.
+        target_is_directory (bool, optional): parameter to os.symlink().
+            Defaults to False.
+
+    Raises:
+        ValueError: dst exists and is not a folder.
+    """
+    src_path = os.path.abspath(src)
+    src_name = os.path.basename(src_path)   # src_path is normalized
+    if os.path.isdir(dst):
+        os.symlink(
+            src_path,
+            f"{dst}/{src_name}",
+            target_is_directory=target_is_directory
+        )
+    elif not os.path.exists(dst):
+        os.symlink(
+            src_path,
+            dst,
+            target_is_directory=target_is_directory
+        )
+    else:
+        raise ValueError(
+                f"Destination path '{dst}' already exists and "
+                f"is not a folder.")
+
+def make_dir(path):
+    """
+    Make an empty directory. If path already exists - remove it and rise
+    a warning.
+
+    Args:
+        path (string): relative or absolute path to the directory to be
+            created.
+    """
+    if os.path.exists(path):
+        warnings.warn(f'Directory / file {path} already exists - '
+                      f'removing it.')
+        remove_path(path)
+    os.mkdir(path)

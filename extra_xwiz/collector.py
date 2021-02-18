@@ -113,7 +113,7 @@ def process_frames(conf, n_frames, n_chunks=10):
                   f'./process.sh']
     proc_out = check_output(slurm_args)
     job_id = proc_out.decode('utf-8').split()[-1]    # job id
-    wait_or_cancel(job_id, n_chunks, n_frames, duration, crystfel_version)
+    wait_or_cancel(job_id, '.', n_chunks, n_frames, duration, crystfel_version)
 
 
 def main(argv=None):

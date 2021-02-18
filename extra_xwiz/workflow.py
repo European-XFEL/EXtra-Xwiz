@@ -5,21 +5,23 @@ from glob import glob
 import h5py
 import numpy as np
 import os
+import shutil
 import subprocess
 import warnings
 
 from . import config
 from . import crystfel_info as cri
-from .templates import (MAKE_VDS, PROC_BASH_DIRECT, PROC_VDS_BASH_SLURM, 
+from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, 
                         PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
                         COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .virtualize import check_run_length, write_jf_vds
 from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
                        get_panel_positions, get_panel_vectors,
                        get_panel_offsets, check_geom_format)
-from .utilities import (wait_or_cancel, wait_single, get_crystal_frames,
+from .utilities import (wait_or_cancel, get_crystal_frames,
                         fit_unit_cell, replace_cell, cell_as_string, hex_to_int,
-                        determine_detector, scan_cheetah_proc_dir)
+                        determine_detector, scan_cheetah_proc_dir,
+                        remove_path, make_link, make_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
@@ -157,14 +159,37 @@ class Workflow:
 
         return high_res, cell_keyword
 
-    def process_slurm_multi(self, high_res, cell_keyword, filtered=False):
+    def process_slurm_multi(self, job_dir, high_res, cell_keyword,
+                            filtered=False):
         """ Write a batch-script wrapper for indexamajig from the relevant
             configuration parameters and start a process by sbatch submission
         """
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         duration = self.duration_hits if filtered else self.duration_all
-        with open(f'{prefix}_proc-{self.step}.sh', 'w') as f:
+
+        # Move list files to the slurm directory
+        for input_list in glob(f'{prefix}_*.lst'):
+            shutil.move(input_list, job_dir)
+
+        # Make links to the data, geometry and cell files
+        if self.use_cheetah:
+            # Not sure, needs to be tested
+            make_link(
+                self.data_path,
+                job_dir,
+                target_is_directory=True
+            )
+        else:
+            ds_names = self.cxi_names if self.use_peaks else self.vds_names
+            for ds_name in ds_names:
+                make_link(ds_name, job_dir)
+        make_link(self.geometry, job_dir)
+        if cell_keyword != '':
+            cell_file = cell_keyword.split()[-1]
+            make_link(cell_file, job_dir)
+
+        with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(PROC_CXI_BASH_SLURM % {
                     'CRYSTFEL_VER': self._crystfel_version,
@@ -197,41 +222,19 @@ class Workflow:
                       f'--time={duration}',
                       f'--array=0-{n_nodes-1}',
                       f'./{prefix}_proc-{self.step}.sh']
-        proc_out = subprocess.check_output(slurm_args)
+        proc_out = subprocess.check_output(slurm_args, cwd=job_dir)
         return proc_out.decode('utf-8').split()[-1]    # job id
-
-    # in principle: obsolete
-    def process_slurm_single(self, high_res, cell_keyword):
-        """ Issue a formal sbatch submission but without array i. e. for a
-            single process
-        """
-        with open(f'{self.list_prefix}_proc-1.sh', 'w') as f:
-            f.write(PROC_BASH_DIRECT % {
-                'CRYSTFEL_VER': self._crystfel_version,
-                'PREFIX': self.list_prefix,
-                'GEOM': self.geometry,
-                'CRYSTAL': cell_keyword,
-                'CORES': 40,
-                'RESOLUTION': high_res,
-                'PEAK_METHOD': self.peak_method,
-                'PEAK_THRESHOLD': self.peak_threshold,
-                'PEAK_MIN_PX': self.peak_min_px,
-                'PEAK_SNR': self.peak_snr,
-                'INDEX_METHOD': self.index_method,
-                'INT_RADII': self.integration_radii
-            })
-        slurm_args = ['sbatch',
-                      f'--partition={self.partition}',
-                      f'--time={self.duration_all}',
-                      f'./{self.list_prefix}_proc-1.sh']
-        proc_out = subprocess.check_output(slurm_args)
-        return proc_out.decode('utf-8').split()[-1]  # job id
 
     def wrap_process(self, res_limit, cell_keyword, filtered=False):
         """ Perform the processing as distributed computation job;
             when finished combine the output and remove temporary files
         """
         self.step += 1
+
+        # Prepare a directory to store indexamajig input and output
+        job_dir = f"./indexamajig_{self.step}"
+        make_dir(job_dir)
+
         report_reconfig(self.list_prefix, self.overrides)
         n_frames = len(self.hit_list) if filtered else self.n_frames
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
@@ -240,20 +243,23 @@ class Workflow:
             _duration = input(f'SLURM allocation time [{job_duration}] > ')
             if _duration != '':
                 job_duration = _duration
-        job_id = self.process_slurm_multi(res_limit, cell_keyword,
+        job_id = self.process_slurm_multi(job_dir, res_limit, cell_keyword,
                                           filtered=filtered)
         wait_or_cancel(
             job_id,
+            job_dir,
             n_nodes,
             n_frames,
             job_duration,
             self._crystfel_version)
-        self.concat(filtered)
+        self.concat(job_dir, filtered)
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
         report_step_rate(self.list_prefix, stream_file_name, self.step,
                          res_limit)
-        self.clean_up(job_id, filtered)
+        # self.clean_up(job_id, filtered)
+        if not self.diagnostic:
+            remove_path(job_dir)
 
     def check_cxi(self):
         """ Optional name-by-name confirmation or override of CXI file names;
@@ -463,12 +469,13 @@ class Workflow:
         """ Split up the list of indexed frames (also stored to one file) onto
             N chunks and write N temporary .lst files
         """
-        _n_nodes = input(f'Number of nodes [{self.n_nodes_hits}] > ')
-        if _n_nodes != '':
-            try:
-                self.n_nodes_hits = int(_n_nodes)
-            except TypeError:
-                warnings.warn('Wrong type; kept at default.')
+        if self.interactive:
+            _n_nodes = input(f'Number of nodes [{self.n_nodes_hits}] > ')
+            if _n_nodes != '':
+                try:
+                    self.n_nodes_hits = int(_n_nodes)
+                except TypeError:
+                    warnings.warn('Wrong type; kept at default.')
         n_filtered = len(self.hit_list)
         split_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
         for chunk, sub_indices in enumerate(split_indices):
@@ -478,12 +485,12 @@ class Workflow:
                     f.write(f'{self.hit_list[index]}\n')
         print()
 
-    def concat(self, filtered=False):
+    def concat(self, job_dir, filtered=False):
         """ Concatenate CrystFEL stream files obtained from split-processing
         """
         # in case account for the fact the prefix_* covers prefix_hits_*
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
-        chunks = sorted(glob(f'{prefix}_*.stream'))
+        chunks = sorted(glob(f'{job_dir}/{prefix}_*.stream'))
         with open(f'{prefix}.stream', 'w') as f_out, fileinput.input(chunks) as f_in:
             for ln in f_in:
                 f_out.write(ln)
@@ -548,8 +555,16 @@ class Workflow:
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
         """
+
+        # Prepare a directory to store partialator input and output
+        part_dir = f"./partialator"
+        make_dir(part_dir)
+        # Make links to the refined cell and output stream files
+        make_link(self.cell_file, part_dir)
+        make_link(f"{self.list_prefix}_hits.stream", part_dir)
+
         # scale and average using partialator
-        with open('_tmp_partialator.sh', 'w') as f:
+        with open(f'{part_dir}/_tmp_partialator.sh', 'w') as f:
             f.write(PARTIALATOR_WRAP % {
                 'CRYSTFEL_VER': self._crystfel_version,
                 'PREFIX': self.list_prefix,
@@ -558,10 +573,10 @@ class Workflow:
                 'MODEL': self.scale_model,
                 'MAX_ADU': self.max_adu
             })
-        subprocess.check_output(['sh', '_tmp_partialator.sh'])
+        subprocess.check_output(['sh', '_tmp_partialator.sh'], cwd=part_dir)
 
         # create simple resolution-bin table
-        with open('_tmp_table_gen.sh', 'w') as f:
+        with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
             f.write(CHECK_HKL_WRAP % {
                 'CRYSTFEL_VER': self._crystfel_version,
                 'PREFIX': self.list_prefix,
@@ -569,11 +584,11 @@ class Workflow:
                 'UNIT_CELL': self.cell_file,
                 'HIGH_RES': self.res_higher
             })
-        subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'])
+        subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'], cwd=part_dir)
 
         # create resolution-bin tables based on half-sets
         for i in range(3):
-            with open(f'_tmp_table_gen{i}.sh', 'w') as f:
+            with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
                 f.write(COMPARE_HKL_WRAP % {
                     'CRYSTFEL_VER': self._crystfel_version,
                     'PREFIX': self.list_prefix,
@@ -583,11 +598,12 @@ class Workflow:
                     'FOM': ['CC', 'CCstar', 'Rsplit'][i],
                     'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
                 })
-            subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'])
+            subprocess.check_output(
+                ['sh', f'_tmp_table_gen{i}.sh'], cwd=part_dir)
 
-        for fn in glob('_tmp*'):
+        for fn in glob(f'{part_dir}/_tmp*'):
             os.remove(fn)
-        report_merging_metrics(self.list_prefix)
+        report_merging_metrics(part_dir, self.list_prefix)
 
     def process_late(self):
         """ Last pass of the workflow:
@@ -732,29 +748,32 @@ class Workflow:
 def main(argv=None):
     ap = ArgumentParser(prog="xwiz-workflow")
     ap.add_argument(
-        "-a", "--automatic", help="enable auto-pipeline workflow"
-        " (skip configuration review)",
-        action='store_true'
+        "-a", "--automatic",
+        action='store_true',
+        help="enable auto-pipeline workflow (skip configuration review)"
     )
     ap.add_argument(
-        "-d", "--diagnostic", help="keep SLURM stdout captures for diagnoses"
-        " in case of problems",
-        action='store_true'
+        "-d", "--diagnostic",
+        action='store_true',
+        help="keep SLURM stdout captures for diagnoses in case of problems"
     )
     ap.add_argument(
-        "-r", "--reprocess", help="enter workflow at the re-processing stage"
-        " (refined unit cell and frame selection exist)",
-        action='store_true'
+        "-r", "--reprocess",
+        action='store_true',
+        help="enter workflow at the re-processing stage (refined unit "
+             "cell and frame selection exist)"
     )
     ap.add_argument(
-        "-p", "--peak-input", help="use a CXI data set file from Cheetah"
-        " including pre-localized peaks",
-        action='store_true'
+        "-p", "--peak-input",
+        action='store_true',
+        help="use a CXI data set file from Cheetah including pre-localized "
+             "peaks"
     )
     ap.add_argument(
-        "-c", "--cheetah-input", help="skip VDS generation and assemble input"
-        " from Cheetah folder contents",
-        action='store_true'
+        "-c", "--cheetah-input",
+        action='store_true',
+        help="skip VDS generation and assemble input from Cheetah folder "
+             "contents"
     )
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
