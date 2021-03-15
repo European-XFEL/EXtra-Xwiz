@@ -248,9 +248,7 @@ class Workflow:
         wait_or_cancel(
             job_id,
             job_dir,
-            n_nodes,
             n_frames,
-            job_duration,
             self._crystfel_version)
         self.concat(job_dir, filtered)
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
