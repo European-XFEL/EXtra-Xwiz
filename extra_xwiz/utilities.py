@@ -116,54 +116,58 @@ def calc_progress(out_logs, n_total, crystfel_version):
                                           ['log_frames_pattern']
         frame_info = re.findall(frames_pattern, open(log).read(), re.M)
         if len(frame_info) == 0:
-            current_frames = 0
+            current_n_frames = 0
         else:
-            current_frames = int(frame_info[-1][1])
-        n_frames.append(current_frames)
+            current_n_frames = int(frame_info[-1][1])
+        n_frames.append(current_n_frames)
         # extract numbers of crystals found
         crystal_pattern = cri.crystfel_info[crystfel_version] \
                                            ['log_crystals_pattern']
         crystal_info = re.findall(crystal_pattern, open(log).read(), re.M)
         if len(crystal_info) == 0:
-            current_crystals = 0
+            current_n_crystals = 0
         else:
-            current_crystals = int(crystal_info[-1][1])
-        n_crystals.append(current_crystals)
-    # update progress bar unless stdout-logs are not yet available
-    if len(n_frames) > 0 and len(n_crystals) > 0:
-        print_crystfel_bar(sum(n_frames), n_total, sum(n_crystals), length=50)
+            current_n_crystals = int(crystal_info[-1][1])
+        n_crystals.append(current_n_crystals)
+
+    n_frames_total = 0
+    n_crystals_total = 0
+    if len(n_frames) > 0:
+        n_frames_total = sum(n_frames)
+        n_crystals_total = sum(n_crystals)
+    # Update progress bar
+    print_crystfel_bar(n_frames_total, n_total, n_crystals_total, length=50)
+
+    return n_frames_total
 
 
-def wait_or_cancel(job_id, job_dir, n_nodes, n_total, time_limit,
-                   crystfel_version):
-    """ Loop until queue is empty or time-limit reached
+def wait_or_cancel(job_id, job_dir, n_total,crystfel_version):
+    """
+    Monitor slurm jobs and prepare progress bar.
+
+    Args:
+        job_id (int): id of the slurm job-array.
+        job_dir (string): slurm processing directory.
+        n_total (int): total number of frames to be processed.
+        crystfel_version (string): version of the CrystFEL in use.
     """
     print(' Waiting for job-array', job_id)
-    out_logs = []
-    # wait until at least one allocated job has passed queueing stage
-    while len(out_logs) == 0:
-        time.sleep(5)
-        out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
-        # This may never happen if array of jobs is submitted. 
-        # ARRAY_ID = 0 may be finished before the last ID starts
-    max_time = '0:00'
-    n_tasks = n_nodes
-    # wait until all tasks have finished, hence vanished from the squeue list
-    while n_tasks > 0 and seconds(max_time) <= seconds(time_limit):
+    while True:
         queue = subprocess.check_output(['squeue', '-u', getuser()])
         tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
-        n_tasks = len(tasks)
-        times = [ln.split()[5] for ln in tasks]
-        try:
-            max_time = max(times)
-        except ValueError:
-            # if for some reason the list 'times' is empty
-            max_time = '0:00'
+        if len(tasks) == 0:
+            break
+
+        out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
         calc_progress(out_logs, n_total, crystfel_version)
-        time.sleep(2)
-    # to ensure a full bar after all tasks have finished.
-    calc_progress(out_logs, n_total, crystfel_version)
+
+        time.sleep(1)
+    # To ensure all frames have been processed
+    n_proc = calc_progress(out_logs, n_total, crystfel_version)
     print()
+    if n_proc < n_total:
+        warnings.warn(
+            f"Not all frames were processed by slurm: {n_proc}/{n_total}.")
 
 
 def cell_in_tolerance(probe_constants, reference_file, tolerance):
