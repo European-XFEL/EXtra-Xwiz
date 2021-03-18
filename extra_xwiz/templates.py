@@ -24,7 +24,7 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 template_path = "./agipd_mar18_v11.geom"
 
 [slurm]
-partition = "exfel"
+partition = "upex"
 duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
@@ -38,8 +38,11 @@ peak_snr = 5
 peak_min_px = 1
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
-unit_cell = "hewl.cell"
 n_cores = 40
+
+[unit_cell]
+file = "hewl.cell"
+run_refine = false
 
 [frame_filter]
 match_tolerance = 0.1

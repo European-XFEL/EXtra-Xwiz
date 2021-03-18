@@ -75,7 +75,8 @@ class Workflow:
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
         self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
-        self.cell_file = conf['proc_coarse']['unit_cell']
+        self.cell_file = conf['unit_cell']['file']
+        self.cell_run_refine = conf['unit_cell']['run_refine']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
         self.integration_radii = conf['proc_fine']['integration_radii']
         self.point_group = conf['merging']['point_group']
@@ -546,9 +547,11 @@ class Workflow:
         print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
         report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
         self.write_hit_list()
-        refined_cell = fit_unit_cell(self.cell_ensemble)
-        replace_cell(self.cell_file, refined_cell)
-        self.cell_file = f'{self.cell_file}_refined'
+        if self.cell_run_refine:
+            print('\n-----   TASK: refine unit cell parameters   -----')
+            refined_cell = fit_unit_cell(self.cell_ensemble)
+            replace_cell(self.cell_file, refined_cell)
+            self.cell_file = f'{self.cell_file}_refined'
 
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
@@ -717,7 +720,7 @@ class Workflow:
             self.crystfel_from_config(high_res=self.res_lower)
         self.wrap_process(res_limit, cell_keyword, filtered=False)
 
-        if self.cell_file == 'none':
+        if not os.path.exists(self.cell_file):
             print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
@@ -729,7 +732,8 @@ class Workflow:
                 self.crystfel_from_config(high_res=self.res_lower)
             self.wrap_process(res_limit, cell_keyword, filtered=False)
 
-        print('\n-----   TASK: check crystal frames and refine unit cell -----')
+        print('\n-----   TASK: filter crystal frames according to the'
+              ' unit cell parameters   -----')
         if self.interactive:
             _cell_tolerance = input(f'Match tolerance of frame-cells vs. expectation [{self.cell_tolerance}] > ')
             if _cell_tolerance != '':
