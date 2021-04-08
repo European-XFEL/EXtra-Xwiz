@@ -2,6 +2,7 @@
 
 from getpass import getuser
 from glob import glob
+from os.path import isdir
 import h5py
 import numpy as np
 from scipy.optimize import curve_fit
@@ -375,7 +376,7 @@ def make_link(src, dst, target_is_directory=False):
     Raises:
         ValueError: dst exists and is not a folder.
     """
-    src_path = os.path.abspath(src)
+    src_path = os.path.abspath(os.path.realpath(src))
     src_name = os.path.basename(src_path)   # src_path is normalized
     if os.path.isdir(dst):
         os.symlink(
@@ -394,10 +395,10 @@ def make_link(src, dst, target_is_directory=False):
                 f"Destination path '{dst}' already exists and "
                 f"is not a folder.")
 
-def make_dir(path):
+def make_new_dir(path):
     """
-    Make an empty directory. If path already exists - remove it and rise
-    a warning.
+    Make an empty directory. If path already exists - remove it beforehand
+    and rise a warning.
 
     Args:
         path (string): relative or absolute path to the directory to be
@@ -407,4 +408,54 @@ def make_dir(path):
         warnings.warn(f'Directory / file {path} already exists - '
                       f'removing it.')
         remove_path(path)
-    os.mkdir(path)
+    os.makedirs(path)
+
+def separate_path(path):
+    """
+    Normalize provided path and divide it to folder and file name.
+
+    Args:
+        path (string): path to be separated.
+
+    Returns:
+        (norm_path, path_dir, path_file):
+            norm_path (string): absolute normalized path.
+            path_dir (string): folder part of the normalized path.
+            path_file (string): file from the provided path.
+    """
+    norm_path = os.path.abspath(os.path.realpath(path))
+    if (path.endswith(os.path.sep)
+        or (os.path.exists(norm_path) and os.path.isdir(norm_path))
+        ):
+        norm_path += os.path.sep
+    path_dir = os.path.dirname(path)
+    path_file = os.path.basename(path)
+
+    return norm_path, path_dir, path_file
+
+def copy_file(src, dst):
+    """
+    Copy file from src to dst, where dst could be a file or folder.
+    In case dst folder does not exist - it will be created.
+
+    Args:
+        src (string): source file to copy.
+        dst (string): destination - file or folder name.
+    """
+    src_path, _, src_file = separate_path(src)
+    dst_path, dst_dir, dst_file = separate_path(dst)
+
+    # Avoid 'shutil.SameFileError' - no need to copy file into itself
+    if (src_path == dst_path
+        and src_file):
+        return
+
+    # Remove dst file if already exists
+    if (os.path.exists(dst_path)
+        and dst_file):
+        warnings.warn(f'File "{dst}" already exists - replacing it.')
+    # Prepare the path to dst if not there yet
+    elif not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    shutil.copy2(src_path, dst_path)
