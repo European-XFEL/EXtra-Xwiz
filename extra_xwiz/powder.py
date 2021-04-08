@@ -9,6 +9,7 @@ import sys
 import time
 
 from . import config
+from . import crystfel_info as cri
 from .templates import HDFSEE_WRAP
 
 '''
@@ -72,9 +73,11 @@ def write_hdf5(data, fn):
 
 
 def display_hdf5(fn, geom, crystfel_version):
+    crystfel_import = cri.crystfel_info[crystfel_version]['import']
+
     with open('_hdfsee.sh', 'w') as f:
         f.write(HDFSEE_WRAP % {
-            'CRYSTFEL_VER': crystfel_version,
+            'IMPORT_CRYSTFEL': crystfel_import,
             'DATA_FILE': fn,
             'GEOM': geom
         })

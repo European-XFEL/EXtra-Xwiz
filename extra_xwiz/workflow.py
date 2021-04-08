@@ -11,17 +11,12 @@ import warnings
 
 from . import config
 from . import crystfel_info as cri
+from . import geometry as geo
+from . import utilities as utl
 from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, 
                         PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
                         COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
 from .virtualize import check_run_length, write_jf_vds
-from .geometry import (get_detector_distance, get_photon_energy, get_bad_pixel,
-                       get_panel_positions, get_panel_vectors,
-                       get_panel_offsets, check_geom_format)
-from .utilities import (wait_or_cancel, get_crystal_frames,
-                        fit_unit_cell, replace_cell, cell_as_string, hex_to_int,
-                        determine_detector, scan_cheetah_proc_dir,
-                        remove_path, make_link, make_dir)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
@@ -56,12 +51,23 @@ class Workflow:
         self.n_frames = conf['data']['n_frames']
         self.frame_offset = conf['data']['frame_offset']
         self.list_prefix = conf['data']['list_prefix']
+
         self._crystfel_version = conf['crystfel']['version']
         if self._crystfel_version not in cri.crystfel_info.keys():
             raise ValueError(f'Unsupported CrystFEL version: '
                              f'{self._crystfel_version}')
+
         self.geometry = conf['geom']['file_path']
         self.geom_template = conf['geom']['template_path']
+        if ('add_hd5mask' in conf['geom']
+            and isinstance(conf['geom']['add_hd5mask'], dict)
+            and conf['geom']['add_hd5mask']['run']
+            ):
+            self.geometry = geo.geom_add_hd5mask(
+                self.geometry,
+                conf['geom']['add_hd5mask']
+            )
+
         self.n_nodes_all = conf['slurm']['n_nodes_all']
         self.n_nodes_hits = conf['slurm']['n_nodes_hits']
         self.partition = conf['slurm']['partition']
@@ -73,8 +79,14 @@ class Workflow:
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
         self.peak_min_px = conf['proc_coarse']['peak_min_px']
+        self.peak_max_px = conf['proc_coarse']['peak_max_px']
         self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
+        self.local_bg_radius = conf['proc_coarse']['local_bg_radius']
+        self.max_res = conf['proc_coarse']['max_res']
+        self.min_peaks = conf['proc_coarse']['min_peaks']
+        self.indexamajig_extra_options = conf['proc_coarse']['extra_options']
+
         self.cell_file = conf['unit_cell']['file']
         self.cell_run_refine = conf['unit_cell']['run_refine']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
@@ -153,7 +165,7 @@ class Workflow:
         # check cell file presence; expected 'true' for default or overwrite != 'none'
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
-            self.cell_info.append(cell_as_string(self.cell_file))
+            self.cell_info.append(utl.cell_as_string(self.cell_file))
             print(' [cell-file check o.k.]')
         elif self.cell_file != 'none':
             warnings.warn('Processing without unit cell due to invalid cell file.')
@@ -165,6 +177,7 @@ class Workflow:
         """ Write a batch-script wrapper for indexamajig from the relevant
             configuration parameters and start a process by sbatch submission
         """
+        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         duration = self.duration_hits if filtered else self.duration_all
@@ -176,7 +189,7 @@ class Workflow:
         # Make links to the data, geometry and cell files
         if self.use_cheetah:
             # Not sure, needs to be tested
-            make_link(
+            utl.make_link(
                 self.data_path,
                 job_dir,
                 target_is_directory=True
@@ -184,39 +197,51 @@ class Workflow:
         else:
             ds_names = self.cxi_names if self.use_peaks else self.vds_names
             for ds_name in ds_names:
-                make_link(ds_name, job_dir)
-        make_link(self.geometry, job_dir)
+                utl.make_link(ds_name, job_dir)
+
+        utl.make_link(self.geometry, job_dir)
+        geom_keyword = os.path.basename(self.geometry)
+
         if cell_keyword != '':
-            cell_file = cell_keyword.split()[-1]
-            make_link(cell_file, job_dir)
+            cell_key_split = cell_keyword.split()
+            cell_file = cell_key_split[-1]
+            utl.make_link(cell_file, job_dir)
+            cell_name = os.path.basename(cell_file)
+            cell_keyword = " ".join(cell_key_split[:-1] + [cell_name])
 
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(PROC_CXI_BASH_SLURM % {
-                    'CRYSTFEL_VER': self._crystfel_version,
+                    'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
-                    'GEOM': self.geometry,
+                    'GEOM': geom_keyword,
                     'CRYSTAL': cell_keyword,
                     'CORES': 40,
                     'RESOLUTION': high_res,
                     'PEAKS_HDF5_PATH': self.peaks_path,
                     'INDEX_METHOD': self.index_method,
-                     'INT_RADII':self.integration_radii
+                    'INT_RADII':self.integration_radii,
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options
                 })
             else:
                 f.write(PROC_VDS_BASH_SLURM % {
-                    'CRYSTFEL_VER': self._crystfel_version,
+                    'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
-                    'GEOM': self.geometry,
+                    'GEOM': geom_keyword,
                     'CRYSTAL': cell_keyword,
                     'CORES': 40,
                     'RESOLUTION': high_res,
                     'PEAK_METHOD': self.peak_method,
                     'PEAK_THRESHOLD': self.peak_threshold,
                     'PEAK_MIN_PX': self.peak_min_px,
+                    'PEAK_MAX_PX': self.peak_max_px,
                     'PEAK_SNR': self.peak_snr,
                     'INDEX_METHOD': self.index_method,
-                     'INT_RADII':self.integration_radii
+                    'INT_RADII': self.integration_radii,
+                    'LOCAL_BG_RADIUS': self.local_bg_radius,
+                    'MAX_RES': self.max_res,
+                    'MIN_PEAKS': self.min_peaks,
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options
                 })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
@@ -234,7 +259,7 @@ class Workflow:
 
         # Prepare a directory to store indexamajig input and output
         job_dir = f"./indexamajig_{self.step}"
-        make_dir(job_dir)
+        utl.make_new_dir(job_dir)
 
         report_reconfig(self.list_prefix, self.overrides)
         n_frames = len(self.hit_list) if filtered else self.n_frames
@@ -246,7 +271,7 @@ class Workflow:
                 job_duration = _duration
         job_id = self.process_slurm_multi(job_dir, res_limit, cell_keyword,
                                           filtered=filtered)
-        wait_or_cancel(
+        utl.wait_or_cancel(
             job_id,
             job_dir,
             n_frames,
@@ -258,7 +283,7 @@ class Workflow:
                          res_limit)
         # self.clean_up(job_id, filtered)
         if not self.diagnostic:
-            remove_path(job_dir)
+            utl.remove_path(job_dir)
 
     def check_cxi(self):
         """ Optional name-by-name confirmation or override of CXI file names;
@@ -288,7 +313,7 @@ class Workflow:
             _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
             if _vds_mask != '':
                 self.vds_mask = _vds_mask
-        vds_mask_int = hex_to_int(self.vds_mask)
+        vds_mask_int = utl.hex_to_int(self.vds_mask)
 
         if self.interactive:
             for i, vds_name in enumerate(self.vds_names):
@@ -308,7 +333,7 @@ class Workflow:
                             self.data_runs[i] = _data_path
                         else:
                             print(' [path not found - config kept]')
-                det_type = determine_detector(self.data_runs[i])
+                det_type = utl.determine_detector(self.data_runs[i])
                 if det_type == 'AGIPD':
                     print(' ... for AGIPD-1M data')
                     with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
@@ -343,12 +368,12 @@ class Workflow:
                     warnings.warn(
                         'Cannot find file at designated path, default kept.')
 
-        target_distance = get_detector_distance(self.geometry)
-        target_photon_energy = get_photon_energy(self.geometry)
-        target_bad_pixel = get_bad_pixel(self.geometry)
-        target_panel_corners = get_panel_positions(self.geometry)
-        target_panel_vectors = get_panel_vectors(self.geometry)
-        target_panel_offsets = get_panel_offsets(self.geometry)
+        target_distance = geo.get_detector_distance(self.geometry)
+        target_bad_pixel = geo.get_bad_pixel(self.geometry)
+        target_photon_energy = geo.get_photon_energy(self.geometry)
+        target_panel_corners = geo.get_panel_positions(self.geometry)
+        target_panel_vectors = geo.get_panel_vectors(self.geometry)
+        target_panel_offsets = geo.get_panel_offsets(self.geometry)
         out_fn = self.geometry + '_tf.geom'
         with open(out_fn, 'w') as of:
             of.write('; Geometry file written by EXtra-xwiz\n')
@@ -444,7 +469,7 @@ class Workflow:
             file paths into N temporary .lst files
         """
         print('\n-----   TASK: analyse and distribute Cheetah input   -----')
-        n_files, average_n_frames = scan_cheetah_proc_dir(self.data_path)
+        n_files, average_n_frames = utl.scan_cheetah_proc_dir(self.data_path)
         print('total number of processed files:   {:5d}'.format(n_files))
         print('average number of frames per file: {:.1f}'.format(average_n_frames))
         print('estimated total number of frames:',
@@ -519,9 +544,11 @@ class Workflow:
         """Identify initial unit cell from a relatively small number of frames
            indexed w/o prior cell
         """
+        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+
         with open('_cell_explorer.sh', 'w') as f:
             f.write(CELL_EXPLORER_WRAP % {
-                'CRYSTFEL_VER': self._crystfel_version,
+                'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix
             })
         subprocess.check_output(['sh', '_cell_explorer.sh'])
@@ -534,7 +561,7 @@ class Workflow:
         # the following is likely premature, respectively redundant if we have
           another SLURM-distributed run vs. all frames:
         self.hit_list, _ = \
-            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
+            utl.get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
         self.write_hit_list()
         """
 
@@ -542,15 +569,15 @@ class Workflow:
         """Select diffraction frames from match vs. good cell
         """
         self.hit_list, self.cell_ensemble = \
-            get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file,
+            utl.get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file,
                                self.cell_tolerance)
         print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
         report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
         self.write_hit_list()
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----')
-            refined_cell = fit_unit_cell(self.cell_ensemble)
-            replace_cell(self.cell_file, refined_cell)
+            refined_cell = utl.fit_unit_cell(self.cell_ensemble)
+            utl.replace_cell(self.cell_file, refined_cell)
             self.cell_file = f'{self.cell_file}_refined'
 
     def merge_bragg_obs(self):
@@ -559,15 +586,17 @@ class Workflow:
 
         # Prepare a directory to store partialator input and output
         part_dir = f"./partialator"
-        make_dir(part_dir)
+        utl.make_new_dir(part_dir)
         # Make links to the refined cell and output stream files
-        make_link(self.cell_file, part_dir)
-        make_link(f"{self.list_prefix}_hits.stream", part_dir)
+        utl.make_link(self.cell_file, part_dir)
+        utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
+
+        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
 
         # scale and average using partialator
         with open(f'{part_dir}/_tmp_partialator.sh', 'w') as f:
             f.write(PARTIALATOR_WRAP % {
-                'CRYSTFEL_VER': self._crystfel_version,
+                'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
                 'N_ITER': self.scale_iter,
@@ -579,7 +608,7 @@ class Workflow:
         # create simple resolution-bin table
         with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
             f.write(CHECK_HKL_WRAP % {
-                'CRYSTFEL_VER': self._crystfel_version,
+                'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
                 'UNIT_CELL': self.cell_file,
@@ -591,7 +620,7 @@ class Workflow:
         for i in range(3):
             with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
                 f.write(COMPARE_HKL_WRAP % {
-                    'CRYSTFEL_VER': self._crystfel_version,
+                    'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': self.list_prefix,
                     'POINT_GROUP': self.point_group,
                     'UNIT_CELL': self.cell_file,
@@ -712,7 +741,7 @@ class Workflow:
                     print(' [check o.k.]')
                 else:
                     warnings.warn('Geometry file not found; default kept.')
-        if check_geom_format(self.geometry, self.use_peaks) == False:
+        if geo.check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
             print(f' Geometry transferred to new file "{self.geometry}".')
 

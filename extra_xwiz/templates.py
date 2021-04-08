@@ -17,13 +17,23 @@ cxi_names = "p2304_r0108.cxi"
 list_prefix = "xmpl_30"
 
 [crystfel]
-version = '0.8.0'
+# Available versions: '0.8.0', '0.9.1', 'cfel_dev'
+version = 'cfel_dev'
 
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
 template_path = "./agipd_mar18_v11.geom"
 
+  [geom.add_hd5mask]
+  run = false
+  mask_file = "/gpfs/exfel/u/scratch/SPB/202130/p900201/lysoZn/jfBadPixelMask_03_minus2Panels_stack.h5"
+  mask = "/data/data"
+  mask_good = 1
+  mask_bad = 0
+  output = "geometry/jungfrau_p2696_v2_vds.geom"
+
 [slurm]
+# Available partitions: 'upex', 'exfel'
 partition = "upex"
 duration_all = "1:00:00"
 n_nodes_all = 10
@@ -36,9 +46,14 @@ peak_method = "peakfinder8"
 peak_threshold = 800
 peak_snr = 5
 peak_min_px = 1
+peak_max_px = 2
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 n_cores = 40
+local_bg_radius = 3
+max_res = 1200
+min_peaks = 0
+extra_options = "--no-non-hits-in-stream"
 
 [unit_cell]
 file = "hewl.cell"
@@ -77,9 +92,7 @@ PROC_VDS_BASH_SLURM = """\
 source /usr/share/Modules/init/sh
 
 module load ccp4/7.0
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -91,11 +104,15 @@ indexamajig \\
   --min-snr=%(PEAK_SNR)s \\
   --threshold=%(PEAK_THRESHOLD)s \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
+  --max-pix-count=%(PEAK_MAX_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
   --copy-hdf5-field=/entry_1/pulseId \\
   --copy-hdf5-field=/entry_1/trainId \\
-  --no-non-hits-in-stream \\
-  --int-radius=%(INT_RADII)s
+  --int-radius=%(INT_RADII)s \\
+  --local-bg-radius=%(LOCAL_BG_RADIUS)s \\
+  --max-res=%(MAX_RES)s \\
+  --min-peaks=%(MIN_PEAKS)s \\
+  %(EXTRA_OPTIONS)s
 """
 
 PROC_CXI_BASH_SLURM = """\
@@ -103,9 +120,7 @@ PROC_CXI_BASH_SLURM = """\
 source /usr/share/Modules/init/sh
 
 module load ccp4/7.0
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -118,16 +133,14 @@ indexamajig \\
   --indexing=%(INDEX_METHOD)s \\
   --copy-hdf5-field=/instrument/pulseID \\
   --copy-hdf5-field=/instrument/trainID \\
-  --no-non-hits-in-stream
+  %(EXTRA_OPTIONS)s
 """
 
 PARTIALATOR_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 partialator \\
     -i %(PREFIX)s_hits.stream \\
@@ -142,9 +155,7 @@ CHECK_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 check_hkl \\
     %(PREFIX)s_merged.hkl \\
@@ -158,9 +169,7 @@ COMPARE_HKL_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 compare_hkl \\
     %(PREFIX)s_merged.hkl1 \\
@@ -176,9 +185,7 @@ CELL_EXPLORER_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 cell_explorer %(PREFIX)s.stream
 """
@@ -187,10 +194,7 @@ HDFSEE_WRAP = """\
 #!/bin/sh
 source /usr/share/Modules/init/sh
 
-module load exfel
-module load spack
-spack load crystfel@%(CRYSTFEL_VER)s
+%(IMPORT_CRYSTFEL)s
 
 hdfsee %(DATA_FILE)s -g %(GEOM)s
 """
-

@@ -1,8 +1,12 @@
 """
-Functions to parse the relevant detector geometry from a file
+Functions to parse the relevant detector geometry from a file and write
+additional information to the geometry file.
 """
 
+import os
 import warnings
+
+from . import utilities as utl
 
 def check_geom_format(geometry, use_peaks):
     """ Verify that the provided geometry file is compatible to respective
@@ -103,3 +107,74 @@ def get_panel_offsets(fn):
     return off_dict
 
 
+def geom_add_hd5mask(geometry, mask_dict):
+    """
+    Copy geometry file to mask_dict['output'] and replace all geometry
+    'mask*' parameters with HD5 mask parameters from mask_dict.
+
+    Args:
+        geometry (string): path to the existing geometry file.
+        mask_dict (dict): dictionary with the HD5 mask parameters:
+            {
+            'mask_file' (string): path to the HD5 file with mask.
+            'mask' (string): path to the mask inside HD5 file.
+            'mask_good' (int): value for not masked detector pixels.
+            'mask_bad' (int): value for masked detector pixels.
+            'output' (string): folder or file to which the existing
+                geometry file should be copied.
+            }
+
+    Returns:
+        string: path to the new geometry file.
+    """
+    mask_file = mask_dict['mask_file']
+    mask_path = mask_dict['mask']
+    mask_good = mask_dict['mask_good']
+    mask_bad = mask_dict['mask_bad']
+    geom_file = mask_dict['output']
+
+    utl.copy_file(geometry, geom_file)
+    
+    with open(geom_file, 'r') as geo_f:
+        geo_content = geo_f.readlines()
+
+    idx_write = -1
+    geo_cont_nomask = []
+    # Remove all geometry 'mask*' parameters
+    for i, line in enumerate(geo_content):
+        if not line.lstrip().startswith("mask"):
+            geo_cont_nomask.append(line)
+        elif idx_write == -1:
+            idx_write = i
+    # Put the mask configuration after the 'dim0' key
+    for i, line in enumerate(geo_cont_nomask):
+        if line.lstrip().startswith("dim0"):
+            idx_write = i+1
+    # In case no suitable place for HD5 mask parameters have been found
+    if idx_write == -1:
+        idx_write = 0
+
+    conf_mask = []
+    if (idx_write > 0
+        and geo_cont_nomask[idx_write-1].strip()):
+        if not geo_cont_nomask[idx_write].strip():
+            idx_write += 1
+        else:
+            conf_mask.append("\n")
+
+    conf_mask.append("; EXtra-xwiz: config for a mask from HD5 file:\n")
+    conf_mask.append(f"mask_file = {mask_file}\n")
+    conf_mask.append(f"mask = {mask_path}\n")
+    conf_mask.append(f"mask_good = {mask_good}\n")
+    conf_mask.append(f"mask_bad = {mask_bad}\n")
+
+    if (idx_write < len(geo_cont_nomask)
+        and geo_cont_nomask[idx_write].strip()):
+        conf_mask.append("\n")
+
+    geo_cont_write = (
+        geo_cont_nomask[:idx_write] + conf_mask + geo_cont_nomask[idx_write:])
+    with open(geom_file, 'w') as geo_f:
+        geo_f.write("".join(geo_cont_write))
+
+    return geom_file

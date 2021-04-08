@@ -11,6 +11,7 @@ from extra_xwiz.templates import (PROC_VDS_BASH_SLURM)
 from extra_xwiz.utilities import wait_or_cancel
 
 from extra_xwiz import config
+from extra_xwiz import crystfel_info as cri
 
 
 def sort_by_event(framelist):
@@ -87,13 +88,15 @@ def average_cell(run_nums, cell_file):
 
 def process_frames(conf, n_frames, n_chunks=10):
     crystfel_version = conf['crystfel']['version']
+    crystfel_import = cri.crystfel_info[crystfel_version]['import']
     cell_file = conf['proc_coarse']['unit_cell']
     partition = conf['slurm']['partition']
     n_nodes = conf['slurm']['n_nodes_all']
     duration = conf['slurm']['duration_all']
+
     with open(f'process.sh', 'w') as f:
         f.write(PROC_VDS_BASH_SLURM % {
-                'CRYSTFEL_VER': crystfel_version,
+                'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': 'frames',
                 'GEOM': conf['geom']['file_path'],
                 'CRYSTAL': f'-p {cell_file}',
@@ -102,9 +105,14 @@ def process_frames(conf, n_frames, n_chunks=10):
                 'PEAK_METHOD': conf['proc_coarse']['peak_method'],
                 'PEAK_THRESHOLD': conf['proc_coarse']['peak_threshold'],
                 'PEAK_MIN_PX': conf['proc_coarse']['peak_min_px'],
+                'PEAK_MAX_PX': conf['proc_coarse']['peak_max_px'],
                 'PEAK_SNR': conf['proc_coarse']['peak_snr'],
                 'INDEX_METHOD': conf['proc_coarse']['index_method'],
-                'INT_RADII': conf['proc_fine']['integration_radii']
+                'INT_RADII': conf['proc_fine']['integration_radii'],
+                'LOCAL_BG_RADIUS': conf['proc_coarse']['local_bg_radius'],
+                'MAX_RES': conf['proc_coarse']['max_res'],
+                'MIN_PEAKS': conf['proc_coarse']['min_peaks'],
+                'EXTRA_OPTIONS': conf['proc_coarse']['extra_options']
         })
     slurm_args = ['sbatch',
                   f'--partition={partition}',
