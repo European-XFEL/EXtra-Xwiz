@@ -595,8 +595,10 @@ class Workflow:
                 'MODEL': self.scale_model,
                 'MAX_ADU': self.max_adu
             })
-        subprocess.check_output(['sh', '_tmp_partialator.sh'], cwd=part_dir)
+        out = subprocess.check_output(['sh', '_tmp_partialator.sh'],
+            cwd=part_dir, stderr=subprocess.STDOUT)
 
+        log_items = []
         # create simple resolution-bin table
         with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
             f.write(CHECK_HKL_WRAP % {
@@ -606,7 +608,9 @@ class Workflow:
                 'UNIT_CELL': self.cell_file,
                 'HIGH_RES': self.res_higher
             })
-        subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'], cwd=part_dir)
+        out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
+            cwd=part_dir, stderr=subprocess.STDOUT)
+        log_items.extend(out.decode('utf-8').split())
 
         # create resolution-bin tables based on half-sets
         for i in range(3):
@@ -620,12 +624,13 @@ class Workflow:
                     'FOM': ['CC', 'CCstar', 'Rsplit'][i],
                     'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
                 })
-            subprocess.check_output(
-                ['sh', f'_tmp_table_gen{i}.sh'], cwd=part_dir)
+            out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
+                cwd=part_dir, stderr=subprocess.STDOUT)
+            log_items.extend(out.decode('utf-8').split())
 
         for fn in glob(f'{part_dir}/_tmp*'):
             os.remove(fn)
-        report_merging_metrics(part_dir, self.list_prefix)
+        report_merging_metrics(part_dir, self.list_prefix, log_items)
 
     def process_late(self):
         """ Last pass of the workflow:

@@ -73,11 +73,13 @@ def report_cells(prefix, cell_strings):
             f.write(string)
 
 
-def report_merging_metrics(part_dir, prefix):
+def report_merging_metrics(part_dir, prefix, log_items):
     """Report overall (un-binned) crystallographic figures-of-merit
     """
     labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
     fstring = ['{:15.2f}', '{:15.2f}', '{:15.4f}', '{:15.4f}', '{:15.2f}']
+    it_tags = ['', '<snr>', 'CC', 'CC*', 'Rsplit'] # as in the log_items list
+
     with open(f'{prefix}.summary', 'a') as f:
         f.write('\nCrystallographic FOMs:')
         f.write('\n                          overall    outer shell\n')
@@ -85,17 +87,28 @@ def report_merging_metrics(part_dir, prefix):
                                    'ccstar', 'rsplit']):
             cw = [1, 1, 2, 2, 2][i]  # column index for n_reflections = weight
             cf = [3, 6, 1, 1, 1][i]  # column index for respective FOM value
+
             with open(f'{part_dir}/{prefix}_{table}.dat', 'r') as fd:
                 data_lines = fd.readlines()[1:]
-            w_sum = 0.0
-            f_sum = 0.0
-            for ln in data_lines:
-                item = ln.split()
-                w_sum += int(item[cw])
-                f_sum += (int(item[cw]) * float(item[cf]))
+            '''
+            overall completeness as weighted average; else taken from captured
+            STDERR of check_hkl and compare_hkl tool (list 'log_items')
+            '''
+            if i == 0:
+                w_sum = 0.0
+                f_sum = 0.0
+                for ln in data_lines:
+                    item = ln.split()
+                    w_sum += int(item[cw])
+                    f_sum += (int(item[cw]) * float(item[cf]))
+                fom_all = f_sum / w_sum
+            else:
+                fom_all = float(log_items[log_items.index(it_tags[i]) + 2])
+
             # last line = high-resolution shell
             fom_high = float(data_lines[-1].split()[cf])
-            f.write('{:18}'.format(labels[i]) + fstring[i].format(f_sum/w_sum)
+
+            f.write('{:18}'.format(labels[i]) + fstring[i].format(fom_all)
                     + fstring[i].format(fom_high) + '\n')
 
 
