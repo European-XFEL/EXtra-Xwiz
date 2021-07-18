@@ -112,13 +112,11 @@ indexamajig \\
   --min-pix-count=%(PEAK_MIN_PX)s \\
   --max-pix-count=%(PEAK_MAX_PX)s \\
   --indexing=%(INDEX_METHOD)s \\
-  --copy-hdf5-field=/entry_1/pulseId \\
-  --copy-hdf5-field=/entry_1/trainId \\
   --int-radius=%(INT_RADII)s \\
   --local-bg-radius=%(LOCAL_BG_RADIUS)s \\
   --max-res=%(MAX_RES)s \\
   --min-peaks=%(MIN_PEAKS)s \\
-  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
@@ -145,9 +143,7 @@ indexamajig \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
   --indexing=%(INDEX_METHOD)s \\
-  --copy-hdf5-field=/instrument/pulseID \\
-  --copy-hdf5-field=/instrument/trainID \\
-  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
