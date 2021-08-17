@@ -94,6 +94,12 @@ source /usr/share/Modules/init/sh
 module load ccp4/7.0
 %(IMPORT_CRYSTFEL)s
 
+NODE="$(srun hostname)"
+TIMELIMIT="$(squeue -j $SLURM_JOB_ID -o '%%l' | tail -1)"
+
+echo "LOG: Job started at $NODE with the time limit of $TIMELIMIT."
+echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
+
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
@@ -113,6 +119,8 @@ indexamajig \\
   --max-res=%(MAX_RES)s \\
   --min-peaks=%(MIN_PEAKS)s \\
   %(EXTRA_OPTIONS)s
+
+echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
 
 PROC_CXI_BASH_SLURM = """\
@@ -121,6 +129,12 @@ source /usr/share/Modules/init/sh
 
 module load ccp4/7.0
 %(IMPORT_CRYSTFEL)s
+
+NODE="$(srun hostname)"
+TIMELIMIT="$(squeue -j $SLURM_JOB_ID -o '%%l' | tail -1)"
+
+echo "LOG: Job started at $NODE with the time limit of $TIMELIMIT."
+echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -134,6 +148,8 @@ indexamajig \\
   --copy-hdf5-field=/instrument/pulseID \\
   --copy-hdf5-field=/instrument/trainID \\
   %(EXTRA_OPTIONS)s
+
+echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
 
 PARTIALATOR_WRAP = """\
