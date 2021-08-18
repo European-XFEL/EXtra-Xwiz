@@ -331,6 +331,29 @@ def scan_cheetah_proc_dir(path):
     return n_files, (n_frames / len(samples))
 
 
+def get_copy_hdf5_fields(cxi_file):
+    """Prepare '--copy-hdf5-field' option parameters for CrystFEL jobs
+
+    Args:
+        cxi_file (string): path to the input data in CXI format.
+
+    Returns:
+        string: '--copy-hdf5-field' options for CrystFEL.
+    """
+    str_options = ""
+    with h5py.File(cxi_file,'r') as h5file:
+        id_path = ""
+        for path in ['entry_1', 'instrument']:
+            if path in h5file.keys():
+                id_path = f"/{path}"
+        if not id_path:
+            warnings.warn(f"No suitable key in the input data: {cxi_file}.")
+            return ""
+        for id_key in ['trainId', 'pulseId', 'memoryCell']:
+            if id_key in h5file[id_path]:
+                str_options += f"  --copy-hdf5-field={id_path}/{id_key} \\\n"
+    return str_options
+
 def remove_path(path):
     """
     Remove entry if it is a file, symbolic link or directory.

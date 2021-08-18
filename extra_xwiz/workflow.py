@@ -208,6 +208,11 @@ class Workflow:
             cell_name = os.path.basename(cell_file)
             cell_keyword = " ".join(cell_key_split[:-1] + [cell_name])
 
+        # Prepare '--copy-hdf5-field' option parameters
+        with open(f"{job_dir}/{prefix}_0.lst") as lst_f:
+            data_file_0 = lst_f.readline().split(' ')[0]
+            copy_fields = utl.get_copy_hdf5_fields(f"{job_dir}/{data_file_0}")
+
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(PROC_CXI_BASH_SLURM % {
@@ -219,7 +224,8 @@ class Workflow:
                     'RESOLUTION': high_res,
                     'PEAKS_HDF5_PATH': self.peaks_path,
                     'INDEX_METHOD': self.index_method,
-                    'INT_RADII':self.integration_radii,
+                    'INT_RADII': self.integration_radii,
+                    'COPY_FIELDS': copy_fields,
                     'EXTRA_OPTIONS': self.indexamajig_extra_options
                 })
             else:
@@ -240,6 +246,7 @@ class Workflow:
                     'LOCAL_BG_RADIUS': self.local_bg_radius,
                     'MAX_RES': self.max_res,
                     'MIN_PEAKS': self.min_peaks,
+                    'COPY_FIELDS': copy_fields,
                     'EXTRA_OPTIONS': self.indexamajig_extra_options
                 })
         slurm_args = ['sbatch',
