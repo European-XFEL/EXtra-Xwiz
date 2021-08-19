@@ -344,7 +344,7 @@ class Workflow:
                                         'VDS_NAME': vds_name,
                                         'MASK_BAD': vds_mask_int
                                         })
-                    subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
+                subprocess.check_output(['sh', f'_tmp_{self.list_prefix}_make_vds.sh'])
             else:
                 print(f'Requested VDS {vds_name} is present already.')
 
