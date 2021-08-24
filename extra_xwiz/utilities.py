@@ -390,10 +390,14 @@ def make_link(src, dst, target_is_directory=False):
     """
     src_path = os.path.abspath(os.path.realpath(src))
     src_name = os.path.basename(src_path)   # src_path is normalized
+
+    dst_dir = os.path.dirname(dst)
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
     if os.path.isdir(dst):
         os.symlink(
             src_path,
-            f"{dst}/{src_name}",
+            dst + os.path.sep + src_name,
             target_is_directory=target_is_directory
         )
     elif not os.path.exists(dst):
@@ -440,8 +444,8 @@ def separate_path(path):
         or (os.path.exists(norm_path) and os.path.isdir(norm_path))
         ):
         norm_path += os.path.sep
-    path_dir = os.path.dirname(path)
-    path_file = os.path.basename(path)
+    path_dir = os.path.dirname(norm_path)
+    path_file = os.path.basename(norm_path)
 
     return norm_path, path_dir, path_file
 
