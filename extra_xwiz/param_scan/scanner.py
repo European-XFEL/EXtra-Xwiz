@@ -1,9 +1,15 @@
-import os.path
+import os.path as osp
 import logging
-import toml
-from os import getcwd, makedirs
+import subprocess
+import time
+from os import getcwd, makedirs, chdir
 from typing import Any, Union
 
+import numpy as np
+import toml
+import xarray as xr
+
+from . import scan_output as sout
 from .. import utilities as utl
 
 
@@ -56,8 +62,8 @@ def get_scan_val(par_val: Union[list, dict]) -> list:
     Parameters
     ----------
     par_val : Union[list, dict]
-        Scan parameter value from the parameters scanner config. Either a list
-        or a dictionary with 'start', 'stop', and 'step' keys.
+        Scan parameter value from the parameters scanner config - either
+        a list or a dictionary with 'start', 'stop', and 'step' keys.
 
     Returns
     -------
@@ -78,19 +84,20 @@ class ParameterScanner:
 
     def __init__(self, scan_conf_file, xwiz_conf_file=None):
         self.scan_conf = toml.load(scan_conf_file)
+        settings = self.scan_conf['settings']
 
         if xwiz_conf_file is not None:
-            if ('conf_file' in self.scan_conf['xwiz']
-                and xwiz_conf_file != self.scan_conf['xwiz']['conf_file']):
+            if ('xwiz_config' in settings
+                and xwiz_conf_file != settings['xwiz_config']):
                 log.warning(
-                    "Ignoring conf_file in the parameters scanner config.")
+                    "Ignoring xwiz_config in the parameters scanner settings.")
             xwiz_conf_sel = xwiz_conf_file
         else:
-            xwiz_conf_sel = self.scan_conf['xwiz']['conf_file']
+            xwiz_conf_sel = settings['xwiz_config']
         self.xwiz_conf = toml.load(xwiz_conf_sel)
 
         self.scan_dir = getcwd()
-        self.xwiz_dir = os.path.abspath(os.path.dirname(xwiz_conf_sel))
+        self.xwiz_dir = osp.abspath(osp.dirname(xwiz_conf_sel))
 
         self.scan_items = list()
         parameters = sorted(self.scan_conf['scan'].keys(), key=str.lower)
@@ -103,17 +110,29 @@ class ParameterScanner:
                         f"Incompatible number of items in 'scan.{param}'.")
             self.scan_items.append((param, n_iter))
 
+        # Total number of jobs
+        self._n_jobs = 1
+        for _, n_items in self.scan_items:
+            self._n_jobs *= n_items
+        # Currently runing job id:
+        self._cur_job = 0
+        # Log when % of jobs finished
+        if 'log_completion' in settings:
+            self.log_completion = settings['log_completion']
+        else:
+            self.log_completion = 30
 
-    def iterate_folders(
+
+    def _iterate_folders(
         self, folder_base, iter_pars, run_method, make_folders=False,
-        folder_vals_all={}, *args, **kwargs
+        folder_vals_all={}, scan_coords=[], **kwargs
     ):
         sub_pars = iter_pars[:]
         param, n_iter = sub_pars.pop(0)
 
         for i_iter in range(n_iter):
-            folder_path = folder_base + os.path.sep + f"{param}_{i_iter:02d}"
-            folder_toml = folder_path + os.path.sep + "value.toml"
+            folder_path = folder_base + osp.sep + f"{param}_{i_iter:02d}"
+            folder_toml = folder_path + osp.sep + "folder_value.toml"
             folder_vals = dict()
             for key in self.scan_conf['scan'][param].keys():
                 param_vals = get_scan_val(self.scan_conf['scan'][param][key])
@@ -123,8 +142,10 @@ class ParameterScanner:
                         f"Folder value for {key} specified multiple times.")
             folder_vals_cur = folder_vals_all.copy()
             folder_vals_cur.update(folder_vals)
+            scan_coords_cur = scan_coords.copy()
+            scan_coords_cur.append(i_iter)
 
-            if (os.path.exists(folder_path)):
+            if (osp.exists(folder_path)):
                 if toml.load(folder_toml) != folder_vals:
                     raise RuntimeError(
                         f"Folder '{folder_path}' exists but folder value is"
@@ -139,24 +160,26 @@ class ParameterScanner:
                         f"Folder '{folder_path}' does not exist.")
 
             if sub_pars:
-                self.iterate_folders(
+                self._iterate_folders(
                     folder_path, sub_pars, run_method, make_folders,
-                    folder_vals_cur, *args, **kwargs
+                    folder_vals_cur, scan_coords_cur, **kwargs
                 )
             else:
-                run_method(folder_path, folder_vals_cur, *args, **kwargs)
+                run_method(
+                    folder_path, folder_vals_cur, scan_coords_cur, **kwargs
+                )
 
 
-    def prep_folder(self, folder, folder_vals, link_paths):
+    def _prep_folder(self, folder, folder_vals, scan_coords, link_paths):
         for link_src, link_dst in link_paths:
-            link_dst_full = os.path.abspath(folder + os.path.sep + link_dst)
-            if not os.path.exists(link_dst_full):
+            link_dst_full = osp.abspath(folder + osp.sep + link_dst)
+            if not osp.exists(link_dst_full):
                 utl.make_link(link_src, link_dst_full)
 
         xwiz_folder_conf = self.xwiz_conf.copy()
         for parameter, value in folder_vals.items():
             set_dict_val(xwiz_folder_conf, parameter, value)
-        with open(folder + os.path.sep + "xwiz_conf.toml", 'w') as conf_file:
+        with open(folder + osp.sep + "xwiz_conf.toml", 'w') as conf_file:
             toml.dump(xwiz_folder_conf, conf_file)
 
 
@@ -170,7 +193,7 @@ class ParameterScanner:
                 for path in path_val:
                     update_relative_paths(path_par, path)
             else:
-                if not os.path.isabs(path_val):
+                if not osp.isabs(path_val):
                     relative_paths.append((path_par, path_val))
 
         for path_par in self.scan_conf['xwiz']['path_parameters']:
@@ -184,29 +207,100 @@ class ParameterScanner:
         # List relative paths which can be linked
         link_paths = list()
         for path_par, path in relative_paths:
-            tmp_path = self.xwiz_dir + os.path.sep + path
-            abs_path = os.path.abspath(os.path.realpath(tmp_path))
-            if os.path.exists(abs_path):
+            tmp_path = self.xwiz_dir + osp.sep + path
+            abs_path = osp.abspath(osp.realpath(tmp_path))
+            if osp.exists(abs_path):
                 link_paths.append((abs_path, path))
             else:
                 log.warning(
                     f"Relative path from xwiz config does not exist:"
                     f" {path_par} = {path}")
 
-        self.iterate_folders(
-            self.scan_dir, self.scan_items, self.prep_folder, True,
+        self._iterate_folders(
+            self.scan_dir, self.scan_items, self._prep_folder, True,
             link_paths=link_paths)
 
 
-    def run_folder(self, folder, folder_vals, link_paths):
-        pass
+    def _run_folder(self, folder, folder_vals, scan_coords, log_nth):
+        folder_name = folder[len(self.scan_dir)+1:]
+        def print_progress(n_cur, n_tot, folder):
+            return f"{n_cur}/{n_tot} Running in: {folder}"
+
+        if self._get_folder_output(folder) is None:
+            chdir(folder)
+            with open('run_folder.log', 'w') as flog:
+                proc = subprocess.Popen(
+                    ['xwiz-workflow', '-a', '-d'],
+                    stdout=flog, stderr=flog
+                )
+            while proc.poll() is None:
+                utl.print_progress_bar(
+                    self._cur_job, self._n_jobs,
+                    extra_string=print_progress, folder=folder_name
+                )
+                time.sleep(0.2)
+            chdir(self.scan_dir)
+
+        self._cur_job += 1
+        if (self._cur_job % log_nth == 0
+            or self._cur_job >= self._n_jobs
+            ):
+            log.info(f"Finished job {self._cur_job}/{self._n_jobs}: {folder}.")
+        if self._cur_job >= self._n_jobs:
+            utl.print_progress_bar(self._cur_job, self._n_jobs)
+            print()
+
 
     def run_jobs(self):
-        # Total number of jobs
-        n_jobs = 1
-        for _, n_items in self.scan_items:
-            n_jobs *= n_items
+        self._cur_job = 0
+        log_nth_job = int(self._n_jobs*self.log_completion/100 + 0.999)
+        self._iterate_folders(
+            self.scan_dir, self.scan_items, self._run_folder,
+            log_nth=log_nth_job
+        )
 
 
-    def collect_output(self):
-        pass
+    def _get_folder_output(self, folder):
+        xwiz_pref = self.xwiz_conf['data']['list_prefix']
+        summ_file = folder + osp.sep + f"{xwiz_pref}.summary"
+        if (osp.exists(summ_file)):
+            return sout.get_xwiz_index_rate(summ_file)
+        else:
+            return None
+
+
+    def _output_folder(self, folder, folder_vals, scan_coords, output_array):
+        index_rate = self._get_folder_output(folder)
+        output_array[tuple(scan_coords)] = index_rate
+
+
+    def collect_outputs(self):
+        # Prepare xarray to store output
+        scan_shape = list()
+        scan_dims = list()
+        scan_coords = dict()
+        for param, n_vals in self.scan_items:
+            scan_shape.append(n_vals)
+            scan_dims.append(param)
+            for key in self.scan_conf['scan'][param].keys():
+                if param.lower() in key.lower():
+                    param_coords = get_scan_val(self.scan_conf['scan'][param][key])
+                    scan_coords[param] = param_coords
+                    break
+        empty_arr = np.empty(scan_shape)
+        empty_arr[:] = np.NaN
+        scan_data = xr.DataArray(empty_arr, dims=scan_dims, coords=scan_coords)
+        scan_data.attrs["long_name"] = "indexing rate"
+        scan_data.attrs["units"] = "%"
+
+        self._iterate_folders(
+            self.scan_dir, self.scan_items, self._output_folder,
+            output_array=scan_data
+        )
+
+        for out_key in self.scan_conf['output'].keys():
+            if out_key in sout.output_processors.dict:
+                processor = sout.output_processors.dict[out_key]
+                processor(scan_data, **self.scan_conf['output'][out_key])
+            else:
+                log.error(f"Unrecognized output processor: {out_key}.")
