@@ -49,7 +49,8 @@ setup(name="EXtra-xwiz",
           'h5py',
           'numpy',
           'scipy',
-          'toml'
+          'toml',
+          'xarray',
       ],
       extras_require={
           'docs': [],

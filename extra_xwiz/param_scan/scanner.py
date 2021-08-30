@@ -102,10 +102,14 @@ class ParameterScanner:
         self.scan_items = list()
         parameters = sorted(self.scan_conf['scan'].keys(), key=str.lower)
         for param in parameters:
-            n_iter = len(next(iter(self.scan_conf['scan'][param].values())))
+            param_rand_values = get_scan_val(
+                next(iter(self.scan_conf['scan'][param].values())))
+            n_iter = len(param_rand_values)
             # All parameters in the scan have to have the same number of items
             for key in self.scan_conf['scan'][param].keys():
-                if len(self.scan_conf['scan'][param][key]) != n_iter:
+                param_key_values = get_scan_val(
+                    self.scan_conf['scan'][param][key])
+                if len(param_key_values) != n_iter:
                     raise RuntimeError(
                         f"Incompatible number of items in 'scan.{param}'.")
             self.scan_items.append((param, n_iter))
