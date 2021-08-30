@@ -76,6 +76,8 @@ def get_scan_val(par_val: Union[list, dict]) -> list:
         if 'step' not in par_val:
             par_val['step'] = 1
         return list(range(par_val['start'], par_val['end']+1, par_val['step']))
+    elif not isinstance(par_val, list):
+        return [par_val]
     else:
         return par_val
 
