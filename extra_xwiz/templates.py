@@ -17,7 +17,7 @@ cxi_names = "p2304_r0108.cxi"
 list_prefix = "xmpl_30"
 
 [crystfel]
-# Available versions: '0.8.0', '0.9.1', 'cfel_dev'
+# Available versions: '0.8.0', '0.9.1', '0.10.0', 'cfel_dev'
 version = 'cfel_dev'
 
 [geom]
@@ -89,7 +89,9 @@ extra-data-make-virtual-cxi \\
 
 PROC_VDS_BASH_SLURM = """\
 #!/bin/sh
-source /usr/share/Modules/init/sh
+unset LD_PRELOAD
+source /etc/profile.d/modules.sh
+module purge
 
 module load ccp4/7.0
 %(IMPORT_CRYSTFEL)s
@@ -99,6 +101,9 @@ TIMELIMIT="$(squeue -j $SLURM_JOB_ID -o '%%l' | tail -1)"
 
 echo "LOG: Job started at $NODE with the time limit of $TIMELIMIT."
 echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
+echo ""
+indexamajig --version
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
@@ -123,7 +128,9 @@ echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 
 PROC_CXI_BASH_SLURM = """\
 #!/bin/sh
-source /usr/share/Modules/init/sh
+unset LD_PRELOAD
+source /etc/profile.d/modules.sh
+module purge
 
 module load ccp4/7.0
 %(IMPORT_CRYSTFEL)s
@@ -133,6 +140,9 @@ TIMELIMIT="$(squeue -j $SLURM_JOB_ID -o '%%l' | tail -1)"
 
 echo "LOG: Job started at $NODE with the time limit of $TIMELIMIT."
 echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
+echo ""
+indexamajig --version
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
