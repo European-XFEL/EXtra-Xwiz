@@ -1,88 +1,23 @@
-import os.path as osp
 import logging
+import os.path as osp
 import subprocess
 import time
 from os import getcwd, makedirs, chdir
-from typing import Any, Union
 
 import numpy as np
 import toml
 import xarray as xr
 
 from . import scan_output as sout
+from . import utilities as sutl
 from .. import utilities as utl
 
 
 log = logging.getLogger(__name__)
 
-def get_dict_val(dictionary: dict, parameter: str) -> Any:
-    """Get value of the dot-separates parameter form the dictionary.
-
-    Parameters
-    ----------
-    dictionary : dict
-        Dictionary to read parameter from.
-    parameter : str
-        Dot-separated parameter path in the dictionary, e.g.:
-        'some.par' corresponds to dictionary['some']['par'].
-
-    Returns
-    -------
-    Any
-        Value of the parameter in the dictionary.
-    """
-    if '.' in parameter:
-        key, new_parameter = parameter.split('.', 1)
-        return get_dict_val(dictionary[key], new_parameter)
-    else:
-        return dictionary[parameter]
-
-def set_dict_val(dictionary: dict, parameter: str, value: Any) -> None:
-    """Set value for the dot-separates parameter in the dictionary.
-
-    Parameters
-    ----------
-    dictionary : dict
-        Dictionary to set parameter in.
-    parameter : str
-        Dot-separated parameter path in the dictionary, e.g.:
-        'some.par' corresponds to dictionary['some']['par'].
-    value : Any
-        Value to be assigned to the parameter.
-    """
-    if '.' in parameter:
-        key, new_parameter = parameter.split('.', 1)
-        set_dict_val(dictionary[key], new_parameter, value)
-    else:
-        dictionary[parameter] = value
-
-def get_scan_val(par_val: Union[list, dict]) -> list:
-    """Get a list of scan parameter values for iteration.
-
-    Parameters
-    ----------
-    par_val : Union[list, dict]
-        Scan parameter value from the parameters scanner config - either
-        a list or a dictionary with 'start', 'stop', and 'step' keys.
-
-    Returns
-    -------
-    list
-        List of parameter values for iteration.
-    """
-    if isinstance(par_val, dict):
-        if 'start' not in par_val:
-            par_val['start'] = 0
-        if 'step' not in par_val:
-            par_val['step'] = 1
-        return list(range(par_val['start'], par_val['end']+1, par_val['step']))
-    elif not isinstance(par_val, list):
-        return [par_val]
-    else:
-        return par_val
-
-
 class ParameterScanner:
+    """Class to perform a grid scan over selected xwiz parameters and
+    collect xwiz job results."""
 
     def __init__(self, scan_conf_file, xwiz_conf_file=None):
         self.scan_conf = toml.load(scan_conf_file)
@@ -104,12 +39,12 @@ class ParameterScanner:
         self.scan_items = list()
         parameters = sorted(self.scan_conf['scan'].keys(), key=str.lower)
         for param in parameters:
-            param_rand_values = get_scan_val(
+            param_rand_values = sutl.get_scan_val(
                 next(iter(self.scan_conf['scan'][param].values())))
             n_iter = len(param_rand_values)
             # All parameters in the scan have to have the same number of items
             for key in self.scan_conf['scan'][param].keys():
-                param_key_values = get_scan_val(
+                param_key_values = sutl.get_scan_val(
                     self.scan_conf['scan'][param][key])
                 if len(param_key_values) != n_iter:
                     raise RuntimeError(
@@ -130,8 +65,8 @@ class ParameterScanner:
 
 
     def _iterate_folders(
-        self, folder_base, iter_pars, run_method, make_folders=False,
-        folder_vals_all={}, scan_coords=[], **kwargs
+        self, iter_pars, folder_base, run_method, make_folders=False,
+        folder_vals_prev={}, scan_coords=[], **kwargs
     ):
         sub_pars = iter_pars[:]
         param, n_iter = sub_pars.pop(0)
@@ -139,14 +74,9 @@ class ParameterScanner:
         for i_iter in range(n_iter):
             folder_path = folder_base + osp.sep + f"{param}_{i_iter:02d}"
             folder_toml = folder_path + osp.sep + "folder_value.toml"
-            folder_vals = dict()
-            for key in self.scan_conf['scan'][param].keys():
-                param_vals = get_scan_val(self.scan_conf['scan'][param][key])
-                folder_vals[key] = param_vals[i_iter]
-                if key in folder_vals_all:
-                    raise RuntimeError(
-                        f"Folder value for {key} specified multiple times.")
-            folder_vals_cur = folder_vals_all.copy()
+            folder_vals = sutl._get_folder_values(
+                i_iter, self.scan_conf['scan'][param], folder_vals_prev)
+            folder_vals_cur = folder_vals_prev.copy()
             folder_vals_cur.update(folder_vals)
             scan_coords_cur = scan_coords.copy()
             scan_coords_cur.append(i_iter)
@@ -167,7 +97,7 @@ class ParameterScanner:
 
             if sub_pars:
                 self._iterate_folders(
-                    folder_path, sub_pars, run_method, make_folders,
+                    sub_pars, folder_path, run_method, make_folders,
                     folder_vals_cur, scan_coords_cur, **kwargs
                 )
             else:
@@ -184,7 +114,7 @@ class ParameterScanner:
 
         xwiz_folder_conf = self.xwiz_conf.copy()
         for parameter, value in folder_vals.items():
-            set_dict_val(xwiz_folder_conf, parameter, value)
+            sutl.set_dict_val(xwiz_folder_conf, parameter, value)
         with open(folder + osp.sep + "xwiz_conf.toml", 'w') as conf_file:
             toml.dump(xwiz_folder_conf, conf_file)
 
@@ -192,23 +122,13 @@ class ParameterScanner:
     def make_folders(self):
         # List of the relative paths in xwiz config
         relative_paths = list()
-        def update_relative_paths(path_par, path_val):
-            if isinstance(path_val, str) and ',' in path_val:
-                path_val = [st.strip() for st in path_val.split(',')]
-            if isinstance(path_val, list):
-                for path in path_val:
-                    update_relative_paths(path_par, path)
-            else:
-                if not osp.isabs(path_val):
-                    relative_paths.append((path_par, path_val))
-
         for path_par in self.scan_conf['xwiz']['path_parameters']:
             try:
-                path_val = get_dict_val(self.xwiz_conf, path_par)
+                path_val = sutl.get_dict_val(self.xwiz_conf, path_par)
             except KeyError:
                 log.warning(f"No '{path_par}' parameter in xwiz config.")
             else:
-                update_relative_paths(path_par, path_val)
+                sutl.append_relative_paths(path_par, path_val, relative_paths)
 
         # List relative paths which can be linked
         link_paths = list()
@@ -223,7 +143,7 @@ class ParameterScanner:
                     f" {path_par} = {path}")
 
         self._iterate_folders(
-            self.scan_dir, self.scan_items, self._prep_folder, True,
+            self.scan_items, self.scan_dir, self._prep_folder, True,
             link_paths=link_paths)
 
 
@@ -232,7 +152,7 @@ class ParameterScanner:
         def print_progress(n_cur, n_tot, folder):
             return f"{n_cur}/{n_tot} Running in: {folder}"
 
-        if self._get_folder_output(folder) is None:
+        if not self._get_folder_foms(folder):
             chdir(folder)
             with open('run_folder.log', 'w') as flog:
                 proc = subprocess.Popen(
@@ -261,27 +181,25 @@ class ParameterScanner:
         self._cur_job = 0
         log_nth_job = int(self._n_jobs*self.log_completion/100 + 0.999)
         self._iterate_folders(
-            self.scan_dir, self.scan_items, self._run_folder,
+            self.scan_items, self.scan_dir, self._run_folder,
             log_nth=log_nth_job
         )
 
 
-    def _get_folder_output(self, folder):
+    def _get_folder_foms(self, folder):
         xwiz_pref = self.xwiz_conf['data']['list_prefix']
         summ_file = folder + osp.sep + f"{xwiz_pref}.summary"
-        if (osp.exists(summ_file)):
-            return sout.get_xwiz_index_rate(summ_file)
-        else:
-            return None
+        return sout.get_xwiz_foms(summ_file)
 
 
-    def _output_folder(self, folder, folder_vals, scan_coords, output_array):
-        index_rate = self._get_folder_output(folder)
-        output_array[tuple(scan_coords)] = index_rate
+    def _output_folder(self, folder, folder_vals, scan_coords, output_dataset):
+        xwiz_foms = self._get_folder_foms(folder)
+        for fom in xwiz_foms:
+            output_dataset[fom][tuple(scan_coords)] = xwiz_foms[fom]
 
 
     def collect_outputs(self):
-        # Prepare xarray to store output
+        # Prepare xarray Dataset to store output
         scan_shape = list()
         scan_dims = list()
         scan_coords = dict()
@@ -290,19 +208,25 @@ class ParameterScanner:
             scan_dims.append(param)
             for key in self.scan_conf['scan'][param].keys():
                 if param.lower() in key.lower():
-                    param_coords = get_scan_val(self.scan_conf['scan'][param][key])
+                    param_coords = sutl.get_scan_val(
+                        self.scan_conf['scan'][param][key])
                     scan_coords[param] = param_coords
                     break
         empty_arr = np.empty(scan_shape)
         empty_arr[:] = np.NaN
-        scan_data = xr.DataArray(empty_arr, dims=scan_dims, coords=scan_coords)
-        scan_data.attrs["long_name"] = "indexing rate"
-        scan_data.attrs["units"] = "%"
+        scan_data = xr.Dataset()
+        for fom in sout.FOMS:
+            data_arr = xr.DataArray(
+                empty_arr.copy(), dims=scan_dims, coords=scan_coords)
+            data_arr.attrs["long_name"] = fom
+            scan_data.update({fom: data_arr.astype(sout.FOMS[fom]['type'])})
 
         self._iterate_folders(
-            self.scan_dir, self.scan_items, self._output_folder,
-            output_array=scan_data
+            self.scan_items, self.scan_dir, self._output_folder,
+            output_dataset=scan_data
         )
+
+        log.info(f"Parameters scan results:\n{scan_data.to_dataframe()}")
 
         for out_key in self.scan_conf['output'].keys():
             if out_key in sout.output_processors.dict:
