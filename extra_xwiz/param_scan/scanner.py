@@ -5,6 +5,7 @@ import time
 from os import getcwd, makedirs, chdir
 
 import numpy as np
+import pandas as pd
 import toml
 import xarray as xr
 
@@ -31,6 +32,7 @@ class ParameterScanner:
             xwiz_conf_sel = xwiz_conf_file
         else:
             xwiz_conf_sel = settings['xwiz_config']
+        log.info(f"Running with xwiz config from: {xwiz_conf_sel}")
         self.xwiz_conf = toml.load(xwiz_conf_sel)
 
         self.scan_dir = getcwd()
@@ -187,7 +189,9 @@ class ParameterScanner:
 
 
     def _get_folder_foms(self, folder):
-        xwiz_pref = self.xwiz_conf['data']['list_prefix']
+        folder_conf_file = folder + osp.sep + "xwiz_conf.toml"
+        folder_config = toml.load(folder_conf_file)
+        xwiz_pref = folder_config['data']['list_prefix']
         summ_file = folder + osp.sep + f"{xwiz_pref}.summary"
         return sout.get_xwiz_foms(summ_file)
 
@@ -226,6 +230,8 @@ class ParameterScanner:
             output_dataset=scan_data
         )
 
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.expand_frame_repr', False)
         log.info(f"Parameters scan results:\n{scan_data.to_dataframe()}")
 
         for out_key in self.scan_conf['output'].keys():

@@ -48,6 +48,7 @@ setup(name="EXtra-xwiz",
       install_requires=[
           'h5py',
           'numpy',
+          'pandas',
           'scipy',
           'toml',
           'xarray',
