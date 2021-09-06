@@ -1,5 +1,10 @@
 import os.path as osp
 from typing import Any, Union
+from os import makedirs
+from shutil import rmtree
+
+import toml
+
 
 def get_dict_val(dictionary: dict, parameter: str) -> Any:
     """Get value of the dot-separates parameter form the dictionary.
@@ -23,6 +28,7 @@ def get_dict_val(dictionary: dict, parameter: str) -> Any:
     else:
         return dictionary[parameter]
 
+
 def set_dict_val(dictionary: dict, parameter: str, value: Any) -> None:
     """Set value for the dot-separates parameter in the dictionary.
 
@@ -41,6 +47,7 @@ def set_dict_val(dictionary: dict, parameter: str, value: Any) -> None:
         set_dict_val(dictionary[key], new_parameter, value)
     else:
         dictionary[parameter] = value
+
 
 def get_scan_val(par_val: Union[list, dict]) -> list:
     """Get a list of scan parameter values.
@@ -67,7 +74,8 @@ def get_scan_val(par_val: Union[list, dict]) -> list:
     else:
         return par_val
 
-def _get_folder_values(
+
+def get_folder_values(
     i_iter: int, scan_param_dict: dict, folder_vals_prev: dict
 ) -> dict:
     """Get folder values from scan_param_dict for iteration i_iter.
@@ -94,7 +102,6 @@ def _get_folder_values(
         one of the parent directories.
     """
     folder_vals = dict()
-    # scan_param_dict => self.scan_conf['scan'][param]
     for key in scan_param_dict.keys():
         param_vals = get_scan_val(scan_param_dict[key])
         folder_vals[key] = param_vals[i_iter]
@@ -103,9 +110,56 @@ def _get_folder_values(
                 f"Folder value for {key} specified multiple times.")
     return folder_vals
 
+
+def check_scan_folder(
+    folder_path: str, folder_vals: dict, make_folder: bool,
+    replace_folder: bool
+) -> None:
+    """Check or create a folder for one of the parameters scan steps.
+
+    Parameters
+    ----------
+    folder_path : str
+        Path to the current scan folder.
+    folder_vals : dict
+        Dictionary of xwiz config parameters which correspond to the
+        current scan folder.
+    make_folder : bool
+        Whether to create a folder if it does no exist or rise an error.
+    replace_folder : bool
+        Whether to replace an already existing folder.
+
+    Raises
+    ------
+    RuntimeError
+        If a scan folder exists and should not be replaced but folder
+        values do not correspond to folder_vals.
+    RuntimeError
+        If a scan folder should exist but it does not.
+    """
+    folder_toml = folder_path + osp.sep + "folder_value.toml"
+
+    if (make_folder and replace_folder and osp.exists(folder_path)):
+        rmtree(folder_path)
+
+    if osp.exists(folder_path):
+        if toml.load(folder_toml) != folder_vals:
+            raise RuntimeError(
+                f"Folder '{folder_path}' exists but folder value is"
+                f"incompatible to {folder_vals}.")
+    else:
+        if make_folder:
+            makedirs(folder_path)
+            with open(folder_toml, 'w') as toml_file:
+                toml.dump(folder_vals, toml_file)
+        else:
+            raise RuntimeError(
+                f"Folder '{folder_path}' does not exist.")
+
+
 def append_relative_paths(
     path_par: str, path_val: Union[str, list], relative_paths: list
-):
+) -> None:
     """If xwiz path parameter is a relative path - append it to the
     relative_paths.
 

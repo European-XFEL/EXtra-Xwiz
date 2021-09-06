@@ -1,8 +1,9 @@
+"""Template for the xwiz parameters scanner configuration."""
 
 CONFIG_TEMPLATE = """\
 [settings]
 
-xwiz_config = '/gpfs/exfel/data/user/turkot/LWork/Xwiz/merged/dev_copy_h5_fields/r_02/xwiz_conf.toml'
+xwiz_config = '/gpfs/exfel/data/user/turkot/store/xwiz/p2697/xwiz_conf.toml'
 log_completion = 20
 
 [xwiz]
@@ -11,9 +12,7 @@ path_parameters = [
     'data.vds_names',
     'geom.file_path',
     'geom.add_hd5mask.mask_file',
-    'geom.add_hd5mask.output',
-    'unit_cell.file',
-    'some.crazy.path'
+    'geom.add_hd5mask.output'
 ]
 
 

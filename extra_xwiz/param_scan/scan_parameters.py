@@ -1,6 +1,6 @@
-import argparse
 import logging
 import os.path as osp
+from argparse import ArgumentParser
 
 from .scanner import ParameterScanner
 from .template import CONFIG_TEMPLATE
@@ -21,6 +21,31 @@ def main(argv=None):
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 
+    parser = ArgumentParser(
+        prog="xwiz-scan-parameters",
+        description='Run xwiz scanning through the parameters specified in'
+                    'xwiz_scan_conf.toml.'
+    )
+
+    parser.add_argument(
+        '-xc', '--xwiz_config',
+        help="Use specified xwiz configuration file. If this option is"
+             " omitted configuration file specified in the scan config"
+             " will be used."
+    )
+    exc_group = parser.add_mutually_exclusive_group()
+    exc_group.add_argument(
+        '-o', '--output',
+        action='store_true',
+        help="Skip running xwiz jobs and just collect existing output."
+    )
+    exc_group.add_argument(
+        '-f', '--force',
+        action='store_true',
+        help="Replace any existing job folders."
+    )
+    args = parser.parse_args(argv)
+
     log.info("Starting EXtra-xwiz parameters scanner.")
 
     scan_config = "xwiz_scan_conf.toml"
@@ -30,10 +55,11 @@ def main(argv=None):
             log.info(f"Scan configuration template written to {scan_config}.")
             exit(0)
 
-    scanner = ParameterScanner(scan_config)
+    scanner = ParameterScanner(scan_config, args.xwiz_config, args.force)
 
     scanner.make_folders()
-    scanner.run_jobs()
+    if not args.output:
+        scanner.run_jobs()
     scanner.collect_outputs()
 
     log.info("EXtra-xwiz parameters scan finished.")
