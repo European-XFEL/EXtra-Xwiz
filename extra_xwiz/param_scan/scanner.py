@@ -3,6 +3,7 @@ import os.path as osp
 import subprocess
 import time
 from os import getcwd, makedirs, chdir
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -13,20 +14,39 @@ from . import output as sout
 from . import utilities as sutl
 from .. import utilities as utl
 
-
 log = logging.getLogger(__name__)
+
 
 class ParameterScanner:
     """Class to perform a grid scan over selected xwiz parameters and
-    collect xwiz job results."""
+    collect xwiz job results.
 
-    def __init__(self, scan_conf_file, xwiz_conf_file=None, replace=False):
+    Parameters
+    ----------
+    scan_conf_file : str
+        Path to the parameters scan configuration file.
+    xwiz_conf_file : str, optional
+        Path to the xwiz configuration file, by default None
+    replace : bool, optional
+        Whether to replace existing scan folders, by default False.
+
+    Raises
+    ------
+    RuntimeError
+        In case any of the scans in scan config has parameters with
+        different number of items.
+    """
+
+    def __init__(
+        self, scan_conf_file: str, xwiz_conf_file: str = None,
+        replace: bool = False
+    ):
         self.scan_conf = toml.load(scan_conf_file)
         settings = self.scan_conf['settings']
 
         if xwiz_conf_file is not None:
             if ('xwiz_config' in settings
-                and xwiz_conf_file != settings['xwiz_config']):
+                    and xwiz_conf_file != settings['xwiz_config']):
                 log.warning(
                     "Ignoring xwiz_config in the parameters scanner settings.")
             xwiz_conf_sel = xwiz_conf_file
@@ -66,11 +86,11 @@ class ParameterScanner:
         else:
             self.log_completion = 30
 
-
     def _iterate_folders(
-        self, iter_pars, folder_base, run_method, make_folders=False,
-        folder_vals_prev={}, scan_coords=[], **kwargs
-    ):
+        self, iter_pars: tuple, folder_base: str, run_method: Callable,
+        make_folders: bool = False, folder_vals_prev: dict = None,
+        scan_coords: list = None, **kwargs
+    ) -> None:
         """Iterate through the scan folders and run specified method in
         each of them.
 
@@ -104,6 +124,11 @@ class ParameterScanner:
             List of integer indices for the scan step of the parent
             folder, by default [].
         """
+        if folder_vals_prev is None:
+            folder_vals_prev = dict()
+        if scan_coords is None:
+            scan_coords = list()
+
         sub_pars = iter_pars[:]
         param, n_iter = sub_pars.pop(0)
 
@@ -129,8 +154,10 @@ class ParameterScanner:
                     folder_path, folder_vals_cur, scan_coords_cur, **kwargs
                 )
 
-
-    def _prep_folder(self, folder, folder_vals, scan_coords, link_paths):
+    def _prep_folder(
+        self, folder: str, folder_vals: dict, scan_coords: list,
+        link_paths: list
+    ) -> None:
         """Prepare xwiz configuration file and symbolic links required
         for running xwiz job in one of the scan folders.
 
@@ -160,8 +187,7 @@ class ParameterScanner:
         with open(folder + osp.sep + "xwiz_conf.toml", 'w') as conf_file:
             toml.dump(xwiz_folder_conf, conf_file)
 
-
-    def make_folders(self):
+    def make_folders(self) -> None:
         """Prepare all scan folders for running xwiz jobs."""
         # List of the relative paths in xwiz config
         relative_paths = list()
@@ -189,8 +215,9 @@ class ParameterScanner:
             self.scan_items, self.scan_dir, self._prep_folder, True,
             link_paths=link_paths)
 
-
-    def _run_folder(self, folder, folder_vals, scan_coords, log_nth):
+    def _run_folder(
+        self, folder: str, folder_vals: dict, scan_coords: list, log_nth: int
+    ) -> None:
         """Run xwiz-workflow in one of the scan folders.
 
         Parameters
@@ -209,6 +236,7 @@ class ParameterScanner:
             message to the log.
         """
         folder_name = folder[len(self.scan_dir)+1:]
+
         def print_progress(n_cur, n_tot, folder):
             return f"{n_cur}/{n_tot} Running in: {folder}"
 
@@ -230,15 +258,13 @@ class ParameterScanner:
 
         self._cur_job += 1
         if (self._cur_job % log_nth == 0
-            or self._cur_job >= self._n_jobs
-            ):
+                or self._cur_job >= self._n_jobs):
             log.info(f"Finished job {self._cur_job}/{self._n_jobs}: {folder}.")
         if self._cur_job >= self._n_jobs:
             utl.print_progress_bar(self._cur_job, self._n_jobs)
             print()
 
-
-    def run_jobs(self):
+    def run_jobs(self) -> None:
         """Run xwiz job in all scan folders in which foms cannot be read
         from the summary file."""
         self._cur_job = 0
@@ -248,8 +274,7 @@ class ParameterScanner:
             log_nth=log_nth_job
         )
 
-
-    def _get_folder_foms(self, folder):
+    def _get_folder_foms(self, folder: str) -> dict:
         """Get foms from the xwiz summary file in the specified scan
         folder.
 
@@ -269,8 +294,10 @@ class ParameterScanner:
         summ_file = folder + osp.sep + f"{xwiz_pref}.summary"
         return sout.get_xwiz_foms(summ_file)
 
-
-    def _output_folder(self, folder, folder_vals, scan_coords, output_dataset):
+    def _output_folder(
+        self, folder: str, folder_vals: dict, scan_coords: list,
+        output_dataset: xr.Dataset
+    ) -> None:
         """Collect output from one of the scan folders.
 
         Parameters
@@ -290,8 +317,7 @@ class ParameterScanner:
         for fom in xwiz_foms:
             output_dataset[fom][tuple(scan_coords)] = xwiz_foms[fom]
 
-
-    def collect_outputs(self):
+    def collect_outputs(self) -> None:
         """Read foms from the summary files in all scan folders."""
         # Prepare xarray Dataset to store output
         scan_shape = list()

@@ -7,6 +7,7 @@ from .template import CONFIG_TEMPLATE
 
 log = logging.getLogger(__name__)
 
+
 def main(argv=None):
     logging.basicConfig(
         level=logging.INFO,
@@ -65,6 +66,7 @@ def main(argv=None):
     log.info("EXtra-xwiz parameters scan finished.")
 
     handler.close()
+
 
 if __name__ == '__main__':
     main()

@@ -41,6 +41,7 @@ FOMS = {
     },
 }
 
+
 def get_xwiz_foms(summary_file: str) -> dict:
     """Read figures of merit from the xwiz summary file.
 
