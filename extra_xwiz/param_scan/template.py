@@ -12,7 +12,8 @@ path_parameters = [
     'data.vds_names',
     'geom.file_path',
     'geom.add_hd5mask.mask_file',
-    'geom.add_hd5mask.output'
+    'geom.add_hd5mask.output',
+    'unit_cell.file'
 ]
 
 
