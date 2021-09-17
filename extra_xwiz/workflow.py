@@ -15,7 +15,8 @@ from . import geometry as geo
 from . import utilities as utl
 from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, 
                         PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
-                        COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS)
+                        COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS,
+                        CONFIG, ADV_CONFIG)
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
@@ -48,7 +49,10 @@ class Workflow:
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         self.vds_mask = conf['data']['vds_mask_bad']
-        self.cxi_names = conf['data']['cxi_names'].split(',')
+        if 'cxi_names' in conf['data']:
+            self.cxi_names = conf['data']['cxi_names'].split(',')
+        else:
+            self.cxi_names = ['']
         if 'n_frames_offset' in conf['data']:
             self.n_frames_offset = conf['data']['n_frames_offset']
         # Check for deprecated parameter
@@ -889,14 +893,25 @@ def main(argv=None):
         help="skip VDS generation and assemble input from Cheetah folder "
              "contents"
     )
+    ap.add_argument(
+        "-adv", "--advance-config",
+        action='store_true',
+        help="Generate an advanced config instead of the base one."
+    )
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
     if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
         print('Configuration file is not present, will be created.')
-        config.create_file()
+        if args.advance_config:
+            config.create_file(ADV_CONFIG)
+        else:
+            config.create_file(CONFIG)
         print('Please rerun now.')
         exit()
+    elif args.advance_config:
+        warnings.warn(
+            "Ignore --advance-config option since config file already exists.")
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')

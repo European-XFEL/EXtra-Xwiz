@@ -9,6 +9,65 @@ CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
 runs = "30"
+n_frames_percent = 100
+n_frames_total = 100000
+vds_names = "xmpl_30_vds.cxi"
+vds_mask_bad = "0xffff"
+list_prefix = "xmpl_30"
+
+[crystfel]
+# Available versions: '0.8.0', '0.9.1', '0.10.0', 'cfel_dev'
+version = 'cfel_dev'
+
+[geom]
+file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
+template_path = "./agipd_mar18_v11.geom"
+
+[slurm]
+# Available partitions: 'upex', 'exfel'
+partition = "upex"
+duration_all = "1:00:00"
+n_nodes_all = 10
+duration_hits = "0:30:00"
+n_nodes_hits = 4
+
+[proc_coarse]
+resolution = 4.0
+peak_method = "peakfinder8"
+peak_threshold = 800
+peak_snr = 5
+peak_min_px = 1
+peak_max_px = 2
+peaks_hdf5_path = "entry_1/result_1"
+index_method = "mosflm"
+n_cores = 40
+local_bg_radius = 3
+max_res = 1200
+min_peaks = 0
+extra_options = "--no-non-hits-in-stream"
+
+[unit_cell]
+file = "hewl.cell"
+run_refine = false
+
+[frame_filter]
+match_tolerance = 0.1
+
+[proc_fine]
+resolution = 2.0
+integration_radii = "2,3,5"
+
+[merging]
+point_group = "422"
+scaling_model = "unity"
+scaling_iterations = 1
+max_adu = 100000
+"""
+
+ADV_CONFIG = """\
+[data]
+path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
+runs = "30"
 n_frames_offset = 0
 n_frames_max = -1
 n_frames_percent = 100
