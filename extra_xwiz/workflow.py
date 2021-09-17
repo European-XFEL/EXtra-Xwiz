@@ -497,18 +497,19 @@ class Workflow:
 
         # Subtract offset
         nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape)
-        nfr_moff = np.maximum(nfr_raw - nfr_offset, 0)
-
-        # Take only specified percent of the frames
-        nfr_perc = (nfr_moff * self.n_frames_percent/100).astype(int)
+        nfr_cut_offset = np.maximum(nfr_raw - nfr_offset, 0)
 
         # Limit number of frames for each datafile
         nfr_max = np.broadcast_to(self.n_frames_max, nfr_raw.shape).copy()
-        nfr_max[nfr_max < 0] = max(nfr_perc)
-        nfr_cut_max = np.minimum(nfr_perc, nfr_max)
+        nfr_max[nfr_max < 0] = max(nfr_cut_offset)
+        nfr_cut_max = np.minimum(nfr_cut_offset, nfr_max)
+
+        # Take only specified percent of the frames
+        nfr_perc = np.broadcast_to(self.n_frames_percent, nfr_raw.shape)
+        nfr_cut_perc = (nfr_cut_max * nfr_perc/100).astype(int)
 
         # Select frames only up to n_frames_total
-        nfr_cut_total = nfr_cut_max.copy()
+        nfr_cut_total = nfr_cut_perc.copy()
         sumfr_cut_total = sum(nfr_cut_total)
         if self.n_frames_total >= 0 and self.n_frames_total < sumfr_cut_total:
             nfr_left = self.n_frames_total
