@@ -20,6 +20,8 @@ from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
 
+WARN_WRONG_TYPE = 'Wrong type; kept at default.'
+
 
 class Workflow:
 
@@ -47,8 +49,34 @@ class Workflow:
             exit(0)
         self.vds_mask = conf['data']['vds_mask_bad']
         self.cxi_names = conf['data']['cxi_names'].split(',')
-        self.n_frames = conf['data']['n_frames']
-        self.frame_offset = conf['data']['frame_offset']
+        if 'n_frames_offset' in conf['data']:
+            self.n_frames_offset = conf['data']['n_frames_offset']
+        # Check for deprecated parameter
+        elif 'frame_offset' in conf['data']:
+            warnings.warn(
+                "'frame_offset' is being deprecated, please use "
+                "'n_frames_offset' instead.")
+            self.n_frames_offset = conf['data']['frame_offset']
+        else:
+            self.n_frames_offset = 0
+        if 'n_frames_percent' in conf['data']:
+            self.n_frames_percent = conf['data']['n_frames_percent']
+        else:
+            self.n_frames_percent = 100
+        if 'n_frames_max' in conf['data']:
+            self.n_frames_max = conf['data']['n_frames_max']
+        else:
+            self.n_frames_max = -1
+        if 'n_frames_total' in conf['data']:
+            self.n_frames_total = conf['data']['n_frames_total']
+        # Check for deprecated parameter
+        elif 'n_frames' in conf['data']:
+            warnings.warn(
+                "'n_frames' is being deprecated, please use "
+                "'n_frames_total' instead.")
+            self.n_frames_total = conf['data']['n_frames']
+        else:
+            self.n_frames_total = -1
         self.list_prefix = conf['data']['list_prefix']
 
         self._crystfel_version = conf['crystfel']['version']
@@ -268,7 +296,7 @@ class Workflow:
         utl.make_new_dir(job_dir)
 
         report_reconfig(self.list_prefix, self.overrides)
-        n_frames = len(self.hit_list) if filtered else self.n_frames
+        n_frames = len(self.hit_list) if filtered else self.n_frames_total
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         job_duration = self.duration_hits if filtered else self.duration_all
         if self.interactive:
@@ -412,55 +440,105 @@ class Workflow:
         """ Inquire enumerator and denominator of the frame distribution onto
             chunks: total number (in case truncated) and number of jobs/nodes
         """
-        print('\n-----   TASK: prepare distributed computing   -----')
-        if self.interactive:
-            _n_frames = input(f'Number of frames to process [{self.n_frames}] > ')
-            if _n_frames != '':
-                try:
-                    self.n_frames = int(_n_frames)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
-            _n_nodes = input(f'Number of nodes [{self.n_nodes_all}] > ')
-            if _n_nodes != '':
-                try:
-                    self.n_nodes_all = int(_n_nodes)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
-            _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
-            if _list_prefix != '':
-                self.list_prefix = _list_prefix
+        _nfr_offset = input(
+            f'Frames offset in each datafile[{self.n_frames_offset}] > ')
+        if _nfr_offset != '':
+            try:
+                self.n_frames_offset = int(_nfr_offset)
+            except TypeError:
+                warnings.warn(WARN_WRONG_TYPE)
+        _nfr_percent = input(
+            f'Percent of frames to process[{self.n_frames_percent}] > ')
+        if _nfr_percent != '':
+            try:
+                self.n_frames_percent = int(_nfr_percent)
+            except TypeError:
+                warnings.warn(WARN_WRONG_TYPE)
+        _nfr_max = input(
+            f'Maximum frames per datafile[{self.n_frames_max}] > ')
+        if _nfr_max != '':
+            try:
+                self.n_frames_max = int(_nfr_max)
+            except TypeError:
+                warnings.warn(WARN_WRONG_TYPE)
+        _nfr_total = input(
+            f'Number of frames to process [{self.n_frames_total}] > ')
+        if _nfr_total != '':
+            try:
+                self.n_frames_total = int(_nfr_total)
+            except TypeError:
+                warnings.warn(WARN_WRONG_TYPE)
+
+        _n_nodes = input(f'Number of nodes [{self.n_nodes_all}] > ')
+        if _n_nodes != '':
+            try:
+                self.n_nodes_all = int(_n_nodes)
+            except TypeError:
+                warnings.warn(WARN_WRONG_TYPE)
+        _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
+        if _list_prefix != '':
+            self.list_prefix = _list_prefix
+
 
     def distribute_data(self):
         """ Distribute the consecutive data frames as in the VDS or Cheetah-CXI
             accounting for the number to be processed, onto N chunks, and write
             into N temporary .lst files
         """
-        self.prep_distribute()
+        print('\n-----   TASK: prepare distributed computing   -----')
+        if self.interactive:
+            self.prep_distribute()
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
-        n_frames_total = sum([self.exp_ids[i].shape[0] for i in range(len(self.data_runs))])
-        print('Total number of frames in all runs:', n_frames_total)
-        if self.n_frames > n_frames_total:
-            warnings.warn('Requested number of frames too large, reset to'
-                          f' total frame number of {n_frames_total}.')
-            self.n_frames = n_frames_total
-        if self.n_nodes_all % len(ds_names) != 0:
-            self.n_nodes_all = \
-                int(round(self.n_nodes_all / len(ds_names))) * len(ds_names)
-            warnings.warn('Requested number of nodes was not an integer'
-            f' multiple of runs/ DS files;\n set to: {self.n_nodes_all}')
-        sub_total = self.n_frames // len(ds_names) 
-        for i, ds_name in enumerate(ds_names):
-            split_indices = np.array_split(
-                np.arange(self.frame_offset, self.frame_offset + sub_total,
-                          dtype=int),
-                (self.n_nodes_all / len(ds_names)))
-            for j, sub_indices in enumerate(split_indices):
-                chunk = i * len(split_indices) + j
-                print(len(sub_indices), end=' ')
-                with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
-                    for index in sub_indices:
-                        f.write(f'{ds_name} //{index}\n')
-            print()
+        n_data_files = len(ds_names)
+
+        # Total number of frames in the datafiles
+        nfr_raw = [self.exp_ids[i].shape[0] for i in range(n_data_files)]
+        nfr_raw = np.array(nfr_raw)
+
+        # Subtract offset
+        nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape)
+        nfr_moff = np.maximum(nfr_raw - nfr_offset, 0)
+
+        # Take only specified percent of the frames
+        nfr_perc = (nfr_moff * self.n_frames_percent/100).astype(int)
+
+        # Limit number of frames for each datafile
+        nfr_max = np.broadcast_to(self.n_frames_max, nfr_raw.shape).copy()
+        nfr_max[nfr_max < 0] = max(nfr_perc)
+        nfr_cut_max = np.minimum(nfr_perc, nfr_max)
+
+        # Select frames only up to n_frames_total
+        nfr_cut_total = nfr_cut_max.copy()
+        sumfr_cut_total = sum(nfr_cut_total)
+        if self.n_frames_total >= 0 and self.n_frames_total < sumfr_cut_total:
+            nfr_left = self.n_frames_total
+            for ids in range(n_data_files):
+                if nfr_left > nfr_cut_total[ids]:
+                    nfr_left -= nfr_cut_total[ids]
+                else:
+                    nfr_cut_total[ids] = nfr_left
+                    nfr_cut_total[ids+1:] = 0
+                    break
+        else:
+            self.n_frames_total = sumfr_cut_total
+        print("Total number of frames to process:", sum(nfr_cut_total))
+
+        # Make a list of datasets and frame indices
+        frames_lst = list()
+        for ids in range(n_data_files):
+            for ifr in range(nfr_cut_total[ids]):
+                frames_lst.append(f'{ds_names[ids]} //{ifr+nfr_offset[ids]}\n')
+
+        # Split frames list per slurm node and write to files
+        frames_lst_split = np.array_split(frames_lst, self.n_nodes_all)
+        print("Split into:", end='')
+        for ich, sub_frames_lst in enumerate(frames_lst_split):
+            print(f" {len(sub_frames_lst)}", end='')
+            with open(f'{self.list_prefix}_{ich}.lst', 'w') as flst:
+                for line in sub_frames_lst:
+                    flst.write(line)
+        print()
+
 
     def distribute_cheetah(self):
         """ Distribute the number of Cheetah HDF5 files, accounting for the
@@ -474,7 +552,7 @@ class Workflow:
         print('estimated total number of frames:',
               int(average_n_frames * n_files))
         self.prep_distribute()
-        n_used_files = int(round(self.n_frames / average_n_frames))
+        n_used_files = int(round(self.n_frames_total / average_n_frames))
         if n_used_files > n_files:
             warnings.warn('Number of used files from requested number of'
                           f' frames exceeds total, reset to {n_files}.')
@@ -498,7 +576,7 @@ class Workflow:
                 try:
                     self.n_nodes_hits = int(_n_nodes)
                 except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
+                    warnings.warn(WARN_WRONG_TYPE)
         n_filtered = len(self.hit_list)
         split_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
         for chunk, sub_indices in enumerate(split_indices):
@@ -570,8 +648,8 @@ class Workflow:
         self.hit_list, self.cell_ensemble = \
             utl.get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file,
                                self.cell_tolerance)
-        print('Overall indexing rate is', len(self.hit_list) / self.n_frames)
-        report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames)
+        print('Overall indexing rate is', len(self.hit_list) / self.n_frames_total)
+        report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames_total)
         self.write_hit_list()
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----')
@@ -657,7 +735,7 @@ class Workflow:
                 except ValueError:
                     warnings.warn('Wrong format or types for integration-radii parameter')
         self.wrap_process(res_limit, cell_keyword, filtered=True)
-        report_total_rate(self.list_prefix, self.n_frames)
+        report_total_rate(self.list_prefix, self.n_frames_total)
         report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----')
@@ -681,7 +759,7 @@ class Workflow:
                 try:
                     self.scale_iter = int(_scale_iter)
                 except TypeError:
-                    warnings.warn('Wrong type; kept at default.')
+                    warnings.warn(WARN_WRONG_TYPE)
 
         self.merge_bragg_obs()
 
