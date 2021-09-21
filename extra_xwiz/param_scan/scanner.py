@@ -183,7 +183,7 @@ class ParameterScanner:
 
         xwiz_folder_conf = self.xwiz_conf.copy()
         for parameter, value in folder_vals.items():
-            sutl.set_dict_val(xwiz_folder_conf, parameter, value)
+            utl.set_dotdict_val(xwiz_folder_conf, parameter, value)
         with open(folder + osp.sep + "xwiz_conf.toml", 'w') as conf_file:
             toml.dump(xwiz_folder_conf, conf_file)
 
@@ -193,7 +193,7 @@ class ParameterScanner:
         relative_paths = list()
         for path_par in self.scan_conf['xwiz']['path_parameters']:
             try:
-                path_val = sutl.get_dict_val(self.xwiz_conf, path_par)
+                path_val = utl.get_dotdict_val(self.xwiz_conf, path_par)
             except KeyError:
                 log.warning(f"No '{path_par}' parameter in xwiz config.")
             else:

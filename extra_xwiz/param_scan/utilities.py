@@ -1,52 +1,9 @@
 import os.path as osp
-from typing import Any, Union
+from typing import Union
 from os import makedirs
 from shutil import rmtree
 
 import toml
-
-
-def get_dict_val(dictionary: dict, parameter: str) -> Any:
-    """Get value of the dot-separates parameter form the dictionary.
-
-    Parameters
-    ----------
-    dictionary : dict
-        Dictionary to read parameter from.
-    parameter : str
-        Dot-separated parameter path in the dictionary, e.g.:
-        'some.par' corresponds to dictionary['some']['par'].
-
-    Returns
-    -------
-    Any
-        Value of the parameter in the dictionary.
-    """
-    if '.' in parameter:
-        key, new_parameter = parameter.split('.', 1)
-        return get_dict_val(dictionary[key], new_parameter)
-    else:
-        return dictionary[parameter]
-
-
-def set_dict_val(dictionary: dict, parameter: str, value: Any) -> None:
-    """Set value for the dot-separates parameter in the dictionary.
-
-    Parameters
-    ----------
-    dictionary : dict
-        Dictionary to set parameter in.
-    parameter : str
-        Dot-separated parameter path in the dictionary, e.g.:
-        'some.par' corresponds to dictionary['some']['par'].
-    value : Any
-        Value to be assigned to the parameter.
-    """
-    if '.' in parameter:
-        key, new_parameter = parameter.split('.', 1)
-        set_dict_val(dictionary[key], new_parameter, value)
-    else:
-        dictionary[parameter] = value
 
 
 def get_scan_val(par_val: Union[list, dict]) -> list:
