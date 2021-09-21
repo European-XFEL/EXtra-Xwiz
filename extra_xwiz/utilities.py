@@ -2,13 +2,13 @@
 
 from getpass import getuser
 from glob import glob
-from os.path import isdir
 import h5py
 import numpy as np
 from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
+from typing import Any
 import warnings
 
 # Local imports
@@ -498,3 +498,46 @@ def copy_file(src, dst):
         os.makedirs(dst_dir)
 
     shutil.copy2(src_path, dst_path)
+
+
+def get_dotdict_val(dictionary: dict, parameter: str) -> Any:
+    """Get value of the dot-separates parameter form the dictionary.
+
+    Parameters
+    ----------
+    dictionary : dict
+        Dictionary to read parameter from.
+    parameter : str
+        Dot-separated parameter path in the dictionary, e.g.:
+        'some.par' corresponds to dictionary['some']['par'].
+
+    Returns
+    -------
+    Any
+        Value of the parameter in the dictionary.
+    """
+    if '.' in parameter:
+        key, new_parameter = parameter.split('.', 1)
+        return get_dotdict_val(dictionary[key], new_parameter)
+    else:
+        return dictionary[parameter]
+
+
+def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
+    """Set value for the dot-separates parameter in the dictionary.
+
+    Parameters
+    ----------
+    dictionary : dict
+        Dictionary to set parameter in.
+    parameter : str
+        Dot-separated parameter path in the dictionary, e.g.:
+        'some.par' corresponds to dictionary['some']['par'].
+    value : Any
+        Value to be assigned to the parameter.
+    """
+    if '.' in parameter:
+        key, new_parameter = parameter.split('.', 1)
+        set_dotdict_val(dictionary[key], new_parameter, value)
+    else:
+        dictionary[parameter] = value
