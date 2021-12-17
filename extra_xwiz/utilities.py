@@ -2,13 +2,13 @@
 
 from getpass import getuser
 from glob import glob
-from os.path import isdir
 import h5py
 import numpy as np
 from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
+from typing import Any
 import warnings
 
 # Local imports
@@ -80,6 +80,29 @@ def seconds(tm_str):
         secs += int(units[j]) * pow(60, i)
     # print(secs)
     return secs
+
+
+def print_progress_bar(
+    n_current, n_total, length=50, fill='#',
+    extra_string=lambda s1, s2: '', **kwargs
+):
+    state_str = "—\/"
+    state = getattr(print_progress_bar, 'state', -1)
+    state = state + 1 if state < (len(state_str) - 1) else 0
+    state_ch = state_str[state]
+    print_progress_bar.state = state
+
+    frac = n_current / n_total
+    progress = f"{100 * frac:.1f}%"
+    filled_len = int(length * frac)
+    if filled_len < length:
+        bar = fill * filled_len + state_ch + '—' * (length - filled_len - 1)
+    else:
+        bar = fill * filled_len
+
+    extra_str = extra_string(n_current, n_total, **kwargs)
+    print("\x1b[2K", end='\r')
+    print(f" [{bar}] {progress} {extra_str}", end='\r')
 
 
 def print_simple_bar(n_current, n_total, length=80, fill='#'):
@@ -390,10 +413,14 @@ def make_link(src, dst, target_is_directory=False):
     """
     src_path = os.path.abspath(os.path.realpath(src))
     src_name = os.path.basename(src_path)   # src_path is normalized
+
+    dst_dir = os.path.dirname(dst)
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
     if os.path.isdir(dst):
         os.symlink(
             src_path,
-            f"{dst}/{src_name}",
+            dst + os.path.sep + src_name,
             target_is_directory=target_is_directory
         )
     elif not os.path.exists(dst):
@@ -440,8 +467,8 @@ def separate_path(path):
         or (os.path.exists(norm_path) and os.path.isdir(norm_path))
         ):
         norm_path += os.path.sep
-    path_dir = os.path.dirname(path)
-    path_file = os.path.basename(path)
+    path_dir = os.path.dirname(norm_path)
+    path_file = os.path.basename(norm_path)
 
     return norm_path, path_dir, path_file
 
@@ -471,3 +498,46 @@ def copy_file(src, dst):
         os.makedirs(dst_dir)
 
     shutil.copy2(src_path, dst_path)
+
+
+def get_dotdict_val(dictionary: dict, parameter: str) -> Any:
+    """Get value of the dot-separates parameter form the dictionary.
+
+    Parameters
+    ----------
+    dictionary : dict
+        Dictionary to read parameter from.
+    parameter : str
+        Dot-separated parameter path in the dictionary, e.g.:
+        'some.par' corresponds to dictionary['some']['par'].
+
+    Returns
+    -------
+    Any
+        Value of the parameter in the dictionary.
+    """
+    if '.' in parameter:
+        key, new_parameter = parameter.split('.', 1)
+        return get_dotdict_val(dictionary[key], new_parameter)
+    else:
+        return dictionary[parameter]
+
+
+def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
+    """Set value for the dot-separates parameter in the dictionary.
+
+    Parameters
+    ----------
+    dictionary : dict
+        Dictionary to set parameter in.
+    parameter : str
+        Dot-separated parameter path in the dictionary, e.g.:
+        'some.par' corresponds to dictionary['some']['par'].
+    value : Any
+        Value to be assigned to the parameter.
+    """
+    if '.' in parameter:
+        key, new_parameter = parameter.split('.', 1)
+        set_dotdict_val(dictionary[key], new_parameter, value)
+    else:
+        dictionary[parameter] = value
