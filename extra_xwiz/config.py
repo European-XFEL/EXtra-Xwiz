@@ -1,13 +1,12 @@
 import os
 import toml
-from .templates import CONFIG
 
 conf_path = os.path.join(os.getcwd(), 'xwiz_conf.toml')
 
 
-def create_file():
+def create_file(config_template):
     with open(conf_path, 'w') as f:
-        f.write(CONFIG)
+        f.write(config_template)
     print('Configuration written to', conf_path)
 
 
