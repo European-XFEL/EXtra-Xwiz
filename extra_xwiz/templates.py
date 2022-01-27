@@ -9,7 +9,6 @@ CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
 runs = "30"
-n_frames_percent = 100
 n_frames_total = 100000
 vds_names = "xmpl_30_vds.cxi"
 vds_mask_bad = "0xffff"
@@ -47,7 +46,7 @@ min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
 
 [unit_cell]
-file = "hewl.cell"
+file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
 
 [frame_filter]
