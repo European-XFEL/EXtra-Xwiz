@@ -25,7 +25,6 @@ def hex_to_int(hex_str):
         warnings.warn(' Illegal string given - cannot be interpreted'
                       ' as hex number. Set to 0xffffffff')
         dec_int = int('ffffffff', 16)  # default for make-virtual-cxi
-    print(f' fill-value: {hex_str} = {dec_int}')
     return dec_int
 
 
