@@ -11,7 +11,6 @@ path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
 runs = "30"
 n_frames_total = 100000
 vds_names = "xmpl_30_vds.cxi"
-vds_mask_bad = "0xffff"
 list_prefix = "xmpl_30"
 
 [crystfel]

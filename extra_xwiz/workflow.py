@@ -48,7 +48,6 @@ class Workflow:
         if not len(self.vds_names) == len(self.data_runs):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
-        self.vds_mask = conf['data']['vds_mask_bad']
         if 'cxi_names' in conf['data']:
             self.cxi_names = conf['data']['cxi_names'].split(',')
         else:
@@ -89,6 +88,7 @@ class Workflow:
                              f'{self._crystfel_version}')
 
         self.geometry = conf['geom']['file_path']
+        self.vds_mask = geo.get_bad_pixel(self.geometry)
         self.geom_template = conf['geom']['template_path']
         if ('add_hd5mask' in conf['geom']
             and isinstance(conf['geom']['add_hd5mask'], dict)
@@ -347,11 +347,9 @@ class Workflow:
             usage with indexamajig (CXI compliant format)
         """
         print('\n-----   TASK: check/create virtual data sets   -----')
-        if self.interactive:
-            _vds_mask = input(f'bad-pixel mask bit value [{self.vds_mask}] > ')
-            if _vds_mask != '':
-                self.vds_mask = _vds_mask
         vds_mask_int = utl.hex_to_int(self.vds_mask)
+        print('Bad-pixel mask value for VDS, as from geom file: ' 
+              f'{self.vds_mask} ({vds_mask_int})')
 
         if self.interactive:
             for i, vds_name in enumerate(self.vds_names):
