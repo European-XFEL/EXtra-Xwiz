@@ -347,7 +347,7 @@ class Workflow:
             usage with indexamajig (CXI compliant format)
         """
         print('\n-----   TASK: check/create virtual data sets   -----')
-        vds_mask_int = utl.hex_to_int(self.vds_mask)
+        vds_mask_int = int(self.vds_mask, 16)
         print('Bad-pixel mask value for VDS, as from geom file: ' 
               f'{self.vds_mask} ({vds_mask_int})')
 

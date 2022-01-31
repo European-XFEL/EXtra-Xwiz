@@ -63,12 +63,28 @@ def get_photon_energy(fn):
 def get_bad_pixel(fn):
     """ Read the integer bit-value for bad pixels (mask)
     """
+    default_val = '0xffff'
     with open(fn) as f:
         for ln in f:
-            if ln[:10] == 'mask_bad =':
-                return ln.split()[-1]
-        print(' Warning: "mask_bad" keyword not found')
-        return '0xffff'
+            # Get rid of comments
+            ln = ln.partition(';')[0]
+            if 'mask_bad' in ln:
+                mask_bad_val = ln.partition('=')[2].strip()
+                # Check if the value can be converted from hex to int
+                try:
+                    _ = int(mask_bad_val, 16)
+                except ValueError:
+                    warnings.warn(
+                        f'Illegal "mask_bad" in the geometry: {mask_bad_val}.'
+                        f'Using the default of {default_val}.'
+                    )
+                    mask_bad_val = default_val
+                return mask_bad_val
+        warnings.warn(
+            f'No "mask_bad" keyword in the geometry file.'
+            f'Using the default of {default_val}.'
+        )
+        return default_val
 
 
 def get_panel_positions(fn):
