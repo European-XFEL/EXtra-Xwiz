@@ -81,8 +81,8 @@ def get_bad_pixel(fn):
                     mask_bad_val = default_val
                 return mask_bad_val
         warnings.warn(
-            f'No "mask_bad" keyword in the geometry file.'
-            f'Using the default of {default_val}.'
+            f'\n No "mask_bad" keyword in the geometry file.'
+            f'\n Using the default of {default_val}.'
         )
         return default_val
 
