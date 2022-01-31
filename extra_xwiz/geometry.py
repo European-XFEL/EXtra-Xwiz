@@ -75,8 +75,8 @@ def get_bad_pixel(fn):
                     _ = int(mask_bad_val, 16)
                 except ValueError:
                     warnings.warn(
-                        f'Illegal "mask_bad" in the geometry: {mask_bad_val}.'
-                        f'Using the default of {default_val}.'
+                        f'\n Illegal "mask_bad" in the geometry: {mask_bad_val}.'
+                        f'\n Using the default of {default_val}.'
                     )
                     mask_bad_val = default_val
                 return mask_bad_val
