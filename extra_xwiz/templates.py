@@ -21,8 +21,8 @@ version = 'cfel_dev'
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
 
 [slurm]
-# Available partitions: 'upex', 'exfel'
-partition = "upex"
+# Available partitions: 'all', 'upex', 'exfel'
+partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
@@ -89,8 +89,8 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
   output = "geometry/jungfrau_p2696_v2_vds.geom"
 
 [slurm]
-# Available partitions: 'upex', 'exfel'
-partition = "upex"
+# Available partitions: 'all', 'upex', 'exfel'
+partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
