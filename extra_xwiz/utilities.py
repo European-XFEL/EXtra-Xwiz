@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
-from typing import Any
+from typing import Any, Union
 import warnings
 
 # Local imports
@@ -527,3 +527,78 @@ def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
         set_dotdict_val(dictionary[key], new_parameter, value)
     else:
         dictionary[parameter] = value
+
+
+def string_to_list(value: str) -> list:
+    """Convert input string representing a list to the list of strings.
+    If the input string does not represent a list it will be put as a
+    single list value.
+
+    Parameters
+    ----------
+    value : str
+        Input string representing a list or a single value. Could be a
+        command line input from the user.
+
+    Returns
+    -------
+    list
+        List with the elements as strings.
+    """
+    value = value.strip()
+    if value[0] == '[':
+        result = [val.strip() for val in value.strip('][').split(',')]
+    else:
+        result = [value]
+    return result
+
+
+def user_input_int(
+    message: str, default: Union[int, list], accept_list: bool=True,
+    n_elements: int=-1
+    ) -> Union[int, list]:
+    """A function to request user's input as an integer value or a list
+    of integers.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Union[int, list]
+        Default value to return in case user's input does not satisfy
+        the criteria.
+    accept_list : bool, optional
+        Whether to convert an input to the list, by default True.
+    n_elements : int, optional
+        Expected number of the list elements, by default -1 which means
+        any number. Lists with 1 element are alway accepted and will be
+        broadcasted.
+
+    Returns
+    -------
+    Union[int, list]
+        A value from the user as an int or a list of integers, or the
+        default in case it does not satisfy.
+    """
+    usr_inp = input(f'{message} [{default}] > ')
+    if usr_inp != '':
+        if accept_list:
+            usr_inp = string_to_list(usr_inp)
+            n_inp = len(usr_inp)
+            if (n_elements > 0) and (n_inp != 1) and (n_inp != n_elements):
+                warnings.warn(
+                    f'Expected a list with {n_elements} elements; '
+                    f'kept at default.'
+                )
+                return default
+        try:
+            if accept_list:
+                result = [int(val) for val in usr_inp]
+            else:
+                result = int(usr_inp)
+        except ValueError:
+            warnings.warn('Wrong type; kept at default.')
+            result = default
+        return result
+    else:
+        return default

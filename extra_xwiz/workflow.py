@@ -449,41 +449,28 @@ class Workflow:
         """ Inquire enumerator and denominator of the frame distribution onto
             chunks: total number (in case truncated) and number of jobs/nodes
         """
-        _nfr_offset = input(
-            f'Frames offset in each datafile[{self.n_frames_offset}] > ')
-        if _nfr_offset != '':
-            try:
-                self.n_frames_offset = int(_nfr_offset)
-            except TypeError:
-                warnings.warn(WARN_WRONG_TYPE)
-        _nfr_percent = input(
-            f'Percent of frames to process[{self.n_frames_percent}] > ')
-        if _nfr_percent != '':
-            try:
-                self.n_frames_percent = int(_nfr_percent)
-            except TypeError:
-                warnings.warn(WARN_WRONG_TYPE)
-        _nfr_max = input(
-            f'Maximum frames per datafile[{self.n_frames_max}] > ')
-        if _nfr_max != '':
-            try:
-                self.n_frames_max = int(_nfr_max)
-            except TypeError:
-                warnings.warn(WARN_WRONG_TYPE)
-        _nfr_total = input(
-            f'Number of frames to process [{self.n_frames_total}] > ')
-        if _nfr_total != '':
-            try:
-                self.n_frames_total = int(_nfr_total)
-            except TypeError:
-                warnings.warn(WARN_WRONG_TYPE)
+        n_data_files = len(self.exp_ids)
 
-        _n_nodes = input(f'Number of nodes [{self.n_nodes_all}] > ')
-        if _n_nodes != '':
-            try:
-                self.n_nodes_all = int(_n_nodes)
-            except TypeError:
-                warnings.warn(WARN_WRONG_TYPE)
+        self.n_frames_offset = utl.user_input_int(
+            "Frames offset in each datafile",
+            self.n_frames_offset, n_elements = n_data_files
+        )
+        self.n_frames_max = utl.user_input_int(
+            "Maximum frames per datafile",
+            self.n_frames_max, n_elements = n_data_files
+        )
+        self.n_frames_percent = utl.user_input_int(
+            "Percent of frames to process",
+            self.n_frames_percent, n_elements = n_data_files
+        )
+        self.n_frames_total = utl.user_input_int(
+            "Total maximum number of frames to process",
+            self.n_frames_total, accept_list = False
+        )
+        self.n_nodes_all = utl.user_input_int(
+            "Number of nodes",
+            self.n_nodes_all, accept_list = False
+        )
         _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
         if _list_prefix != '':
             self.list_prefix = _list_prefix
@@ -498,7 +485,7 @@ class Workflow:
         if self.interactive:
             self.prep_distribute()
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
-        n_data_files = len(ds_names)
+        n_data_files = len(self.exp_ids)
 
         # Total number of frames in the datafiles
         nfr_raw = [self.exp_ids[i].shape[0] for i in range(n_data_files)]
