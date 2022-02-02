@@ -506,6 +506,9 @@ class Workflow:
 
         # Subtract offset
         nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape)
+        if any(nfr_offset < 0):
+            warnings.warn("n_frames_offset is forced to be >= 0.")
+            nfr_offset[nfr_offset < 0] = 0
         nfr_cut_offset = np.maximum(nfr_raw - nfr_offset, 0)
 
         # Limit number of frames for each datafile
@@ -515,6 +518,10 @@ class Workflow:
 
         # Take only specified percent of the frames
         nfr_perc = np.broadcast_to(self.n_frames_percent, nfr_raw.shape)
+        if any(nfr_perc < 0) or any(nfr_perc > 100):
+            warnings.warn("n_frames_percent is forced to be within [0, 100].")
+            nfr_perc[nfr_perc < 0] = 0
+            nfr_perc[nfr_perc > 100] = 100
         nfr_cut_perc = (nfr_cut_max * nfr_perc/100).astype(int)
 
         # Select frames only up to n_frames_total
