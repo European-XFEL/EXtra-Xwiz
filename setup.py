@@ -21,53 +21,56 @@ def find_version(*parts):
     raise RuntimeError("Unable to find version string.")
 
 
-setup(name="EXtra-xwiz",
-      version=find_version("extra_xwiz", "__init__.py"),
-      author="European XFEL GmbH",
-      author_email="da-support@xfel.eu",
-      maintainer="Fabio Dall'Antonia",
-      url="",
-      description="Tool to automate SFX workflows",
-      long_description=read("README.md"),
-      long_description_content_type='text/markdown',
-      license="BSD-3-Clause",
-      packages=find_packages(),
-      package_data={
-      },
-      entry_points={
-          "console_scripts": [
-              "xwiz-cell-checker = extra_xwiz.cell_check:main",
-              "xwiz-collector = extra_xwiz.collector:main",
-              "xwiz-powder = extra_xwiz.powder:main",
-              "xwiz-workflow = extra_xwiz.workflow:main",
-              "xwiz-mask-hd52geom = extra_xwiz.mask_converter.mask_hd52geom:main",
-              "xwiz-mask-geom2hd5 = extra_xwiz.mask_converter.mask_geom2hd5:main",
-              "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main"
-          ],
-      },
-      install_requires=[
-          'h5py',
-          'numpy',
-          'pandas',
-          'scipy',
-          'toml',
-          'xarray',
-      ],
-      extras_require={
-          'docs': [],
-          'test': []
-      },
-      python_requires='>=3.6',
-      classifiers=[
-          'Development Status :: 5 - Production/Stable',
-          'Environment :: Console',
-          'Intended Audience :: Developers',
-          'Intended Audience :: Science/Research',
-          'License :: OSI Approved :: BSD License',
-          'Operating System :: POSIX :: Linux',
-          'Programming Language :: Python :: 3',
-          'Topic :: Scientific/Engineering :: Information Analysis',
-          'Topic :: Scientific/Engineering :: Physics',
-      ]
+setup(
+    name="EXtra-xwiz",
+    version=find_version("extra_xwiz", "__init__.py"),
+    author="European XFEL GmbH",
+    author_email="da-support@xfel.eu",
+    maintainer="Fabio Dall'Antonia",
+    url="",
+    description="Tool to automate SFX workflows",
+    long_description=read("README.md"),
+    long_description_content_type='text/markdown',
+    license="BSD-3-Clause",
+    packages=find_packages(),
+    package_data={
+        "": ["resources/*.geom"]
+    },
+    include_package_data=True,
+    entry_points={
+        "console_scripts": [
+            "xwiz-cell-checker = extra_xwiz.cell_check:main",
+            "xwiz-collector = extra_xwiz.collector:main",
+            "xwiz-powder = extra_xwiz.powder:main",
+            "xwiz-workflow = extra_xwiz.workflow:main",
+            "xwiz-mask-hd52geom = extra_xwiz.mask_converter.mask_hd52geom:main",
+            "xwiz-mask-geom2hd5 = extra_xwiz.mask_converter.mask_geom2hd5:main",
+            "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main"
+        ],
+    },
+    install_requires=[
+        'h5py',
+        'numpy',
+        'pandas',
+        'scipy',
+        'toml',
+        'xarray',
+    ],
+    extras_require={
+        'docs': [],
+        'test': []
+    },
+    python_requires='>=3.6',
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Environment :: Console',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: BSD License',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 3',
+        'Topic :: Scientific/Engineering :: Information Analysis',
+        'Topic :: Scientific/Engineering :: Physics',
+    ]
 )
 

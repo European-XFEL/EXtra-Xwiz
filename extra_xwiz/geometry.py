@@ -38,6 +38,24 @@ def check_geom_format(geometry, use_peaks):
     return True
 
 
+def get_detector_type(fn):
+    """ Read the pixel size to tell AGIPD-1M from JUNGFRAU-4M.
+        Send a critical error if the found value does not comply to either
+    """
+    pixel_res = ''
+    with open(fn) as f:
+        for ln in f:
+            if ln[:5] == 'res =':
+                pixel_res = ln.split()[2]
+                break
+        if pixel_res == '5000' or pixel_res == '5000.0':
+            return 'agipd'
+        elif pixel_res == '13333.3':
+            return 'jungfrau'
+        else:
+            print('Fatal error: could not verify detector type'
+                  'Termination due to unresolved geometry format')
+            exit(0)
 
 def get_detector_distance(fn):
     """ Read the sample-to-detector distance (aka "camera length")
