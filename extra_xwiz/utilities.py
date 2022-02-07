@@ -529,6 +529,15 @@ def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
         dictionary[parameter] = value
 
 
+def into_list(value: Any) -> list:
+    """If an input is not a list - embed it into one. Otherwise return
+    the original list."""
+    if isinstance(value, list):
+        return value
+    else:
+        return [value]
+
+
 def string_to_list(value: str) -> list:
     """Convert input string representing a list to the list of strings.
     If the input string does not represent a list it will be put as a

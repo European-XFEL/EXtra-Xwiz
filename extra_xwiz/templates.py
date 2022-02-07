@@ -8,9 +8,9 @@ POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
 CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
-runs = "30"
+runs = [30]
 n_frames_total = 100000
-vds_names = "xmpl_30_vds.cxi"
+vds_names = ["xmpl_30_vds.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
@@ -64,13 +64,13 @@ max_adu = 100000
 ADV_CONFIG = """\
 [data]
 path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
-runs = "30"
+runs = [30]
 n_frames_offset = 0
 n_frames_max = -1
 n_frames_percent = 100
 n_frames_total = 100000
-vds_names = "xmpl_30_vds.cxi"
-cxi_names = "p2304_r0108.cxi"
+vds_names = ["xmpl_30_vds.cxi"]
+cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]

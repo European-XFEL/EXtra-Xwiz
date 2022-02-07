@@ -43,17 +43,33 @@ class Workflow:
         self.data_path = ''                        # for special cheetah tree
         self.exp_ids = []
         conf = config.load_from_file()
+
         data_path = conf['data']['path']
-        run_numbers = [int(n) for n in conf['data']['runs'].split(',')]
+        # 'runs' as a string with coma-separated values is deprecated
+        if isinstance(conf['data']['runs'], str):
+            raise ValueError(
+                "'runs' as a coma-separated string is no longer supported."
+                "Please use an integer or a list of integer runs instead."
+            )
+        run_numbers = utl.into_list(conf['data']['runs'])
         self.data_runs = [f'{data_path}/r{run:04d}' for run in run_numbers]
-        self.vds_names = conf['data']['vds_names'].split(',')
+
+        # 'vds_names' as a string with coma-separated values is deprecated
+        if (isinstance(conf['data']['vds_names'], str)
+            and ',' in conf['data']['vds_names']):
+            raise ValueError(
+                "'vds_names' as a coma-separated string is no longer supported."
+                "Please use a list instead."
+            )
+        self.vds_names = utl.into_list(conf['data']['vds_names'])
         if not len(self.vds_names) == len(self.data_runs):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         if 'cxi_names' in conf['data']:
-            self.cxi_names = conf['data']['cxi_names'].split(',')
+            self.cxi_names = utl.into_list(conf['data']['cxi_names'])
         else:
             self.cxi_names = ['']
+
         if 'n_frames_offset' in conf['data']:
             self.n_frames_offset = conf['data']['n_frames_offset']
         # Check for deprecated parameter
@@ -82,6 +98,7 @@ class Workflow:
             self.n_frames_total = conf['data']['n_frames']
         else:
             self.n_frames_total = -1
+
         self.list_prefix = conf['data']['list_prefix']
 
         self._crystfel_version = conf['crystfel']['version']
@@ -244,7 +261,11 @@ class Workflow:
         # Prepare '--copy-hdf5-field' option parameters
         with open(f"{job_dir}/{prefix}_0.lst") as lst_f:
             data_file_0 = lst_f.readline().split(' ')[0]
-            copy_fields = utl.get_copy_hdf5_fields(f"{job_dir}/{data_file_0}")
+            if os.path.isabs(data_file_0):
+                data_file_path = data_file_0
+            else:
+                data_file_path = f"{job_dir}/{data_file_0}"
+            copy_fields = utl.get_copy_hdf5_fields(data_file_path)
 
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
@@ -492,7 +513,7 @@ class Workflow:
         nfr_raw = np.array(nfr_raw)
 
         # Subtract offset
-        nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape)
+        nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape).copy()
         if any(nfr_offset < 0):
             warnings.warn("n_frames_offset is forced to be >= 0.")
             nfr_offset[nfr_offset < 0] = 0
@@ -504,7 +525,7 @@ class Workflow:
         nfr_cut_max = np.minimum(nfr_cut_offset, nfr_max)
 
         # Take only specified percent of the frames
-        nfr_perc = np.broadcast_to(self.n_frames_percent, nfr_raw.shape)
+        nfr_perc = np.broadcast_to(self.n_frames_percent, nfr_raw.shape).copy()
         if any(nfr_perc < 0) or any(nfr_perc > 100):
             warnings.warn("n_frames_percent is forced to be within [0, 100].")
             nfr_perc[nfr_perc < 0] = 0
