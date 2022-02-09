@@ -112,7 +112,7 @@ min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
 
 [unit_cell]
-file = "hewl.cell"
+file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
 
 [frame_filter]
