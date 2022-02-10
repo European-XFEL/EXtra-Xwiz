@@ -19,7 +19,6 @@ version = 'cfel_dev'
 
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
-template_path = "./agipd_mar18_v11.geom"
 
 [slurm]
 # Available partitions: 'upex', 'exfel'
@@ -80,7 +79,6 @@ version = 'cfel_dev'
 
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
-template_path = "./agipd_mar18_v11.geom"
 
   [geom.add_hd5mask]
   run = false

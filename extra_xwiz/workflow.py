@@ -389,18 +389,19 @@ class Workflow:
             file template in suited format (user ensures correct template)  
         """
         det_type = geo.get_detector_type(self.geometry)
-        template_path == f'{self.self_dir}/resources'
+        template_path = f'{self.self_dir}/resources'
 
-        if self.use_peaks():
+        if self.use_peaks:
             if det_type == 'agipd':
                 geom_template = f'{template_path}/agipd_cheetah.geom'
             elif det_type == 'jungfrau':
                 geom_template = f'{template_path}/jf4m_cheetah.geom'
         else:
-            if self.det_type == 'agipd':
+            if det_type == 'agipd':
                 geom_template = f'{template_path}/agipd_vds.geom'
             elif det_type == 'jungfrau':
                 geom_template = f'{template_path}/jf4m_vds.geom'
+        print('! Using template file:', geom_template)
 
         target_distance = geo.get_detector_distance(self.geometry)
         target_bad_pixel = geo.get_bad_pixel(self.geometry)
@@ -409,7 +410,7 @@ class Workflow:
         target_panel_vectors = geo.get_panel_vectors(self.geometry)
         target_panel_offsets = geo.get_panel_offsets(self.geometry)
 
-        out_fn = self.geometry + '_tf.geom'
+        out_fn = os.path.split(self.geometry)[-1] + '_tf.geom'
         with open(out_fn, 'w') as of:
             of.write('; Geometry file written by EXtra-xwiz\n')
             of.write('; Geometry used: {}\n'.format(self.geometry))
@@ -834,7 +835,7 @@ class Workflow:
                     warnings.warn('Geometry file not found; default kept.')
         if geo.check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
-            print(f' Geometry transferred to new file "{self.geometry}".')
+            print(f'! Geometry transferred to new file "{self.geometry}".')
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
