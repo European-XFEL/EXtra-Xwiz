@@ -1,14 +1,16 @@
 """Utilities"""
 
+from ast import Pass
 from getpass import getuser
 from glob import glob
 import h5py
 import numpy as np
+import re
 from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
-from typing import Any, Union
+from typing import Any, Type, Tuple
 import warnings
 
 # Local imports
@@ -562,22 +564,96 @@ def string_to_list(value: str) -> list:
     return result
 
 
-def user_input_int(
-    message: str, default: Union[int, list], accept_list: bool=True,
-    n_elements: int=-1
-    ) -> Union[int, list]:
-    """A function to request user's input as an integer value or a list
-    of integers.
+def user_input_str(
+    message: str, default: Any, re_format: str=None
+    ) -> Tuple[bool, str]:
+    """A function to request user's input as a string and match it to
+    the regular expression.
 
     Parameters
     ----------
     message : str
         Message to be displayed to the user.
-    default : Union[int, list]
-        Default value to return in case user's input does not satisfy
-        the criteria.
-    accept_list : bool, optional
-        Whether to convert an input to the list, by default True.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it does not match the regular expression.
+    re_format : str, optional
+        Regular expresion to be matched, by default None.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        bool
+            Whether an input from the user have been accepted.
+        str
+            An input from the user in case it satisfies the regular
+            expresion, otherwise the default value.
+    """
+    usr_inp = input(f'{message} [{default}] > ')
+    if usr_inp != '':
+        if re_format is None or re.match(re_format, usr_inp):
+            return True, usr_inp
+        else:
+            warnings.warn(
+                f"Does not satisfy expected format: r'{re_format}'; "
+                "kept at default."
+            )
+            return False, default
+    else:
+        return False, default
+
+
+def user_input_type(
+    message: str, default: Any, val_type: Type
+    ) -> Tuple[bool, Any]:
+    """A function to request user's input and convert it to the
+    specified type.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it cannot be converted to the specified type.
+    val_type : Type
+        Type of the expected user's input.
+
+    Returns
+    -------
+    Tuple[bool, Any]
+        bool
+            Whether an input from the user have been accepted.
+        Any
+            An input from the user in case it can be converted to the
+            specified type, otherwise the default value.
+    """
+    accepted, usr_inp = user_input_str(message, default)
+    if accepted:
+        try:
+            return True, val_type(usr_inp)
+        except ValueError:
+            warnings.warn('Wrong type; kept at default.')
+            return False, default
+    else:
+        return False, default
+
+
+def user_input_list(
+    message: str, default: Any, val_type: Type, n_elements: int=-1
+    ) -> Tuple[bool, list]:
+    """A function to request user's input as a single value or a list of
+    values and convert it to the list of values with the specified type.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it cannot be converted to the specified type.
+    val_type : Type
+        Type of the expected user's input.
     n_elements : int, optional
         Expected number of the list elements, by default -1 which means
         any number. Lists with 1 element are alway accepted and will be
@@ -585,29 +661,28 @@ def user_input_int(
 
     Returns
     -------
-    Union[int, list]
-        A value from the user as an int or a list of integers, or the
-        default in case it does not satisfy.
+    bool, list
+        bool
+            Whether an input from the user have been accepted.
+        list
+            An input from the user as a list of values of specified
+            type, or the default value in case user's input cannot be
+            converted.
     """
-    usr_inp = input(f'{message} [{default}] > ')
-    if usr_inp != '':
-        if accept_list:
-            usr_inp = string_to_list(usr_inp)
-            n_inp = len(usr_inp)
-            if (n_elements > 0) and (n_inp != 1) and (n_inp != n_elements):
-                warnings.warn(
-                    f'Expected a list with {n_elements} elements; '
-                    f'kept at default.'
-                )
-                return default
+    accepted, usr_inp = user_input_str(message, default)
+    if accepted:
+        usr_inp = string_to_list(usr_inp)
+        n_inp = len(usr_inp)
+        if (n_elements > 0) and (n_inp != 1) and (n_inp != n_elements):
+            warnings.warn(
+                f'Expected a list with {n_elements} elements; '
+                f'kept at default.'
+            )
+            return False, default
         try:
-            if accept_list:
-                result = [int(val) for val in usr_inp]
-            else:
-                result = int(usr_inp)
+            return True, [val_type(val) for val in usr_inp]
         except ValueError:
             warnings.warn('Wrong type; kept at default.')
-            result = default
-        return result
+            return False, default
     else:
-        return default
+        return False, default

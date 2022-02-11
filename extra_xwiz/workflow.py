@@ -222,14 +222,12 @@ class Workflow:
         return high_res, cell_keyword
 
     def process_slurm_multi(self, job_dir, high_res, cell_keyword,
-                            filtered=False):
+                            n_nodes, job_duration, filtered=False):
         """ Write a batch-script wrapper for indexamajig from the relevant
             configuration parameters and start a process by sbatch submission
         """
         crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
-        n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
-        duration = self.duration_hits if filtered else self.duration_all
 
         # Move list files to the slurm directory
         for input_list in glob(f'{prefix}_*.lst'):
@@ -305,7 +303,7 @@ class Workflow:
                 })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
-                      f'--time={duration}',
+                      f'--time={job_duration}',
                       f'--array=0-{n_nodes-1}',
                       f'./{prefix}_proc-{self.step}.sh']
         proc_out = subprocess.check_output(slurm_args, cwd=job_dir)
@@ -321,16 +319,20 @@ class Workflow:
         job_dir = f"./indexamajig_{self.step}"
         utl.make_new_dir(job_dir)
 
-        report_reconfig(self.list_prefix, self.overrides)
-        n_frames = len(self.hit_list) if filtered else self.n_frames_total
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         job_duration = self.duration_hits if filtered else self.duration_all
         if self.interactive:
             _duration = input(f'SLURM allocation time [{job_duration}] > ')
             if _duration != '':
                 job_duration = _duration
-        job_id = self.process_slurm_multi(job_dir, res_limit, cell_keyword,
-                                          filtered=filtered)
+
+        report_reconfig(self.list_prefix, self.overrides)
+        n_frames = len(self.hit_list) if filtered else self.n_frames_total
+
+        job_id = self.process_slurm_multi(
+            job_dir, res_limit, cell_keyword, n_nodes, job_duration,
+            filtered=filtered
+        )
         utl.wait_or_cancel(
             job_id,
             job_dir,
@@ -472,29 +474,29 @@ class Workflow:
         """
         n_data_files = len(self.exp_ids)
 
-        self.n_frames_offset = utl.user_input_int(
-            "Frames offset in each datafile",
-            self.n_frames_offset, n_elements = n_data_files
+        accepted, self.n_frames_offset = utl.user_input_list(
+            "Frames offset in each datafile", self.n_frames_offset,
+            val_type = int, n_elements = n_data_files
         )
-        self.n_frames_max = utl.user_input_int(
-            "Maximum frames per datafile",
-            self.n_frames_max, n_elements = n_data_files
+        accepted, self.n_frames_max = utl.user_input_list(
+            "Maximum frames per datafile", self.n_frames_max,
+            val_type = int, n_elements = n_data_files
         )
-        self.n_frames_percent = utl.user_input_int(
-            "Percent of frames to process",
-            self.n_frames_percent, n_elements = n_data_files
+        accepted, self.n_frames_percent = utl.user_input_list(
+            "Percent of frames to process", self.n_frames_percent,
+            val_type = int, n_elements = n_data_files
         )
-        self.n_frames_total = utl.user_input_int(
-            "Total maximum number of frames to process",
-            self.n_frames_total, accept_list = False
+        accepted, self.n_frames_total = utl.user_input_type(
+            "Total maximum number of frames to process", self.n_frames_total,
+            val_type = int
         )
-        self.n_nodes_all = utl.user_input_int(
-            "Number of nodes",
-            self.n_nodes_all, accept_list = False
+        accepted, self.n_nodes_all = utl.user_input_type(
+            "Number of nodes", self.n_nodes_all,
+            val_type = int
         )
-        _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
-        if _list_prefix != '':
-            self.list_prefix = _list_prefix
+        accepted, self.list_prefix = utl.user_input_str(
+            "List file-name prefix", self.list_prefix
+        )
 
 
     def distribute_data(self):
