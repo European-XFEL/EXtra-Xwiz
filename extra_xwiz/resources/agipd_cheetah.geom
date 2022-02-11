@@ -1,4 +1,4 @@
-; Used as data-layout template for conversion from Cheetah-CXI geom giles
+; Used as data-layout template for conversion from Cheetah-CXI geom files
 ; geometry-relevant coordinates and parameters will be replaced 
 
 mask_good = 0x0

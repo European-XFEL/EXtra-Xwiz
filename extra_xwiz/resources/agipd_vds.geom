@@ -1,5 +1,5 @@
 ; Adapted to virtual dataset dimensions in CXI file, 21 November 2018
-; Used as data-layout template for conversion from Cheetah-CXI geom giles
+; Used as data-layout template for conversion from Cheetah-CXI geom files
 ; geometry-relevant coordinates and parameters will be replaced
 
 data = /entry_1/data_1/data
