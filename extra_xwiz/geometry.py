@@ -53,8 +53,13 @@ def get_detector_type(fn):
         elif pixel_res == '13333.3':
             return 'jungfrau'
         else:
-            print('Fatal error: could not verify detector type'
-                  'Termination due to unresolved geometry format')
+            print(
+                'Fatal error: could not verify detector type.\n'
+                'In the geometry file expected:\n'
+                '    "res = 5000" for agipd\n'
+                '    "res = 13333.3" for jungfrau\n'
+                'Termination due to unresolved geometry format'
+            )
             exit(0)
 
 def get_detector_distance(fn):
