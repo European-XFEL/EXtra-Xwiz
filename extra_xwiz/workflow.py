@@ -26,13 +26,15 @@ WARN_WRONG_TYPE = 'Wrong type; kept at default.'
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, automatic=False, diagnostic=False,
-                 reprocess=False, use_peaks=False, use_cheetah=False):
+    def __init__(self, home_dir, work_dir, self_dir, automatic=False,
+                 diagnostic=False, reprocess=False, use_peaks=False,
+                 use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
         self.home_dir = home_dir
         self.work_dir = work_dir
+        self.self_dir = self_dir
         self.interactive = not automatic
         self.diagnostic = diagnostic
         self.reprocess = reprocess
@@ -89,7 +91,6 @@ class Workflow:
 
         self.geometry = conf['geom']['file_path']
         self.vds_mask = geo.get_bad_pixel(self.geometry)
-        self.geom_template = conf['geom']['template_path']
         if ('add_hd5mask' in conf['geom']
             and isinstance(conf['geom']['add_hd5mask'], dict)
             and conf['geom']['add_hd5mask']['run']
@@ -387,15 +388,20 @@ class Workflow:
         """ Transfer corner x/y positions and fs/ss vectors onto a geometry
             file template in suited format (user ensures correct template)  
         """
-        if self.interactive:
-            _geom_template = \
-                input(f'Path to geometry template [{self.geom_template}] > ')
-            if _geom_template != '':
-                if os.path.exists(_geom_template):
-                    self.geom_template = _geom_template
-                else:
-                    warnings.warn(
-                        'Cannot find file at designated path, default kept.')
+        det_type = geo.get_detector_type(self.geometry)
+        template_path = f'{self.self_dir}/resources'
+
+        if self.use_peaks:
+            if det_type == 'agipd':
+                geom_template = f'{template_path}/agipd_cheetah.geom'
+            elif det_type == 'jungfrau':
+                geom_template = f'{template_path}/jf4m_cheetah.geom'
+        else:
+            if det_type == 'agipd':
+                geom_template = f'{template_path}/agipd_vds.geom'
+            elif det_type == 'jungfrau':
+                geom_template = f'{template_path}/jf4m_vds.geom'
+        print('! Using template file:', geom_template)
 
         target_distance = geo.get_detector_distance(self.geometry)
         target_bad_pixel = geo.get_bad_pixel(self.geometry)
@@ -403,12 +409,13 @@ class Workflow:
         target_panel_corners = geo.get_panel_positions(self.geometry)
         target_panel_vectors = geo.get_panel_vectors(self.geometry)
         target_panel_offsets = geo.get_panel_offsets(self.geometry)
-        out_fn = self.geometry + '_tf.geom'
+
+        out_fn = os.path.split(self.geometry)[-1] + '_tf.geom'
         with open(out_fn, 'w') as of:
             of.write('; Geometry file written by EXtra-xwiz\n')
             of.write('; Geometry used: {}\n'.format(self.geometry))
-            of.write('; Format template used: {}\n'.format(self.geom_template))
-            with open(self.geom_template, 'r') as tf:
+            of.write('; Format template used: {}\n'.format(geom_template))
+            with open(geom_template, 'r') as tf:
                 for ln in tf:
                     if ln[:41] == '; Optimized panel offsets can be found at':
                         continue
@@ -828,7 +835,7 @@ class Workflow:
                     warnings.warn('Geometry file not found; default kept.')
         if geo.check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
-            print(f' Geometry transferred to new file "{self.geometry}".')
+            print(f'! Geometry transferred to new file "{self.geometry}".')
 
         res_limit, cell_keyword = \
             self.crystfel_from_config(high_res=self.res_lower)
@@ -899,6 +906,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
+    self_dir = os.path.split(os.path.realpath(__file__))[0]
     if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
         print('Configuration file is not present, will be created.')
         if args.advance_config:
@@ -913,7 +921,7 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir,
+    workflow = Workflow(home_dir, work_dir, self_dir,
                         automatic=args.automatic,
                         diagnostic=args.diagnostic,
                         reprocess=args.reprocess,
