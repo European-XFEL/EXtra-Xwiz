@@ -58,18 +58,6 @@ def fit_gauss_curve(sample):
     return p[1]
 
 
-def seconds(tm_str):
-    """ Convert a time string HH:MM:SS to integer-number seconds
-    """
-    units = tm_str.split(':')
-    secs = 0
-    for i in range(len(units)):
-        j = len(units) - 1 - i
-        secs += int(units[j]) * pow(60, i)
-    # print(secs)
-    return secs
-
-
 def print_progress_bar(
     n_current, n_total, length=50, fill='#',
     extra_string=lambda s1, s2: '', **kwargs
@@ -262,6 +250,7 @@ def replace_cell(fn, const_values):
     """ Write a new cell file based on the provided one, containing the new
         constants as defined by fitting.
     """
+    fn_refined = get_refined_cell_name(fn)
     if fn[-5:] == '.cell':
         const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
         cell_dict = {}
@@ -273,7 +262,7 @@ def replace_cell(fn, const_values):
             for ln in f_in:
                 lines.append(ln)
         # write new cell file
-        with open(f'{fn}_refined', 'w') as f_out:
+        with open(fn_refined, 'w') as f_out:
             for ln in lines:
                 items = ln.split()
                 if len(items) >= 3 and items[0] in const_names:
@@ -288,7 +277,7 @@ def replace_cell(fn, const_values):
             for ln in f_in:
                 if ln[:6] == 'CRYST1':
                     geom = ' '.join(ln.split()[7:])
-        with open(f'{fn}_refined', 'w') as f_out:
+        with open(fn_refined, 'w') as f_out:
             new_cryst = 'CRYST1'
             new_cryst += ''.join([f'{v:9.3f}' for v in const_values[:3]])
             new_cryst += ''.join([f'{v:7.2f}' for v in const_values[3:6]])
@@ -301,16 +290,27 @@ def replace_cell(fn, const_values):
 def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
-    cell_string = '{:20}'.format(cell_file)
-    if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
+    if len(cell_file) < 20:
+        cell_string = f"{cell_file:20}"
+    else:
+        cell_string = f"{cell_file}\n{'':20}"
+    if cell_file[-5:] == '.cell':
         cell_info = re.findall(r'( = )([^\s]+)', open(cell_file).read())
         cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
-    elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
+    elif cell_file[-4:] == '.pdb':
         cell_info = open(cell_file).read().splitlines()[0].split()[1:]
         cell_string += '  '.join(cell_info[6:]) + '  ' + '  '.join(cell_info[:6])
     else:
         warnings.warn(' Cell file is of unknown type (by extension)!')
     return cell_string
+
+
+def get_refined_cell_name(cell_file):
+        """Generate a name for the rifened cell parameters file from the
+        original cell_file."""
+        orig_file = os.path.split(cell_file)[1]
+        f_name, f_ext = orig_file.rsplit('.', 1)
+        return f"{f_name}_refined.{f_ext}"
 
 
 def scan_cheetah_proc_dir(path):

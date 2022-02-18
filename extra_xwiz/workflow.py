@@ -771,7 +771,7 @@ class Workflow:
             print('\n-----   TASK: refine unit cell parameters   -----\n')
             refined_cell = utl.fit_unit_cell(self.cell_ensemble)
             utl.replace_cell(self.cell_file, refined_cell)
-            self.cell_file = f'{self.cell_file}_refined'
+            self.cell_file = utl.get_refined_cell_name(self.cell_file)
 
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
@@ -865,7 +865,7 @@ class Workflow:
             self.verify_data_config_prefix()
             self.verify_cell_config()
             if self.cell_run_refine:
-                self.cell_file = f'{self.cell_file}_refined'
+                self.cell_file = utl.get_refined_cell_name(self.cell_file)
         n_issues = 0
         if not os.path.exists(f'{self.list_prefix}_hits.lst'):
             warnings.warn('Cannot find pre-selection of indexed detector frames')
