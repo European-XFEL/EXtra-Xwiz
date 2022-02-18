@@ -153,7 +153,7 @@ def calc_progress(out_logs, n_total, crystfel_version):
     return n_frames_total
 
 
-def wait_or_cancel(job_id, job_dir, n_total,crystfel_version):
+def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
     """
     Monitor slurm jobs and prepare progress bar.
 
@@ -180,6 +180,7 @@ def wait_or_cancel(job_id, job_dir, n_total,crystfel_version):
     if n_proc < n_total:
         warnings.warn(
             f"Not all frames were processed by slurm: {n_proc}/{n_total}.")
+    return n_proc
 
 
 def cell_in_tolerance(probe_constants, reference_file, tolerance):

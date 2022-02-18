@@ -280,7 +280,7 @@ class Workflow:
             job_dir, res_limit, cell_keyword, n_nodes, job_duration,
             filtered=filtered
         )
-        utl.wait_or_cancel(
+        n_proc_frames = utl.wait_or_cancel(
             job_id,
             job_dir,
             n_frames,
@@ -288,11 +288,14 @@ class Workflow:
         self.concat(job_dir, filtered)
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
-        report_step_rate(self.list_prefix, stream_file_name, self.step,
-                         res_limit)
+        report_step_rate(
+            self.list_prefix, stream_file_name, self.step, res_limit,
+            n_proc_frames
+        )
         # self.clean_up(job_id, filtered)
         if not self.diagnostic:
             utl.remove_path(job_dir)
+        return n_proc_frames
 
     def check_cxi(self):
         """ Optional name-by-name confirmation or override of CXI file names;
@@ -759,8 +762,10 @@ class Workflow:
                 f'{self.list_prefix}.stream', self.cell_file,
                 self.cell_tolerance
             )
-        print('Overall indexing rate is', len(self.hit_list) / self.n_frames_total)
-        report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames_total)
+        n_cryst = len(self.hit_list)
+        index_rate = 100.0 * n_cryst / self.n_proc_frames_all
+        print(f"Overall indexing rate is {index_rate:5.2f} %")
+        report_cell_check(self.list_prefix, n_cryst, self.n_proc_frames_all)
         self.write_hit_list()
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----\n')
@@ -842,8 +847,9 @@ class Workflow:
         self.distribute_hits()
         cell_keyword = self.get_cell_keyword()
 
-        self.wrap_process(self.res_higher, cell_keyword, filtered=True)
-        report_total_rate(self.list_prefix, self.n_frames_total)
+        self.n_proc_frames_hits = self.wrap_process(
+            self.res_higher, cell_keyword, filtered=True)
+        report_total_rate(self.list_prefix, self.n_proc_frames_all)
         report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
@@ -929,7 +935,8 @@ class Workflow:
         if self.interactive:
             self.verify_indexamajig_config_all()
 
-        self.wrap_process(self.res_lower, cell_keyword, filtered=False)
+        self.n_proc_frames_all = self.wrap_process(
+            self.res_lower, cell_keyword, filtered=False)
 
         if not os.path.exists(self.cell_file):
             print('\n-----   TASK: determine initial unit cell and re-run '
@@ -937,7 +944,8 @@ class Workflow:
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
             cell_keyword = self.get_cell_keyword()
-            self.wrap_process(self.res_lower, cell_keyword, filtered=False)
+            self.n_proc_frames_all = self.wrap_process(
+                self.res_lower, cell_keyword, filtered=False)
 
         print('\n-----   TASK: filter crystal frames according to the'
               ' unit cell parameters   -----\n')
