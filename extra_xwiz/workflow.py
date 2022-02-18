@@ -152,6 +152,9 @@ class Workflow:
         self.cell_ensemble = []
         self.cell_info = []
         self.step = 0
+        # store total number of processed frames in the slurm jobs
+        self.n_proc_frames_all = 0
+        self.n_proc_frames_hits = 0
 
     def get_cell_keyword(self):
         """In case cell file exists - prepare a keyword for CrystFEL."""
