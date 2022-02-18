@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
-from typing import Any, Type, Tuple
+from typing import Any, Type, Tuple, Collection
 import warnings
 
 # Local imports
@@ -541,34 +541,39 @@ def into_list(value: Any) -> list:
 
 
 def string_to_list(value: str) -> list:
-    """Convert input string representing a list to the list of strings.
-    If the input string does not represent a list it will be put as a
-    single list value.
-
-    Parameters
-    ----------
-    value : str
-        Input string representing a list or a single value. Could be a
-        command line input from the user.
-
-    Returns
-    -------
-    list
-        List with the elements as strings.
-    """
-    value = value.strip()
-    if value[0] == '[':
-        result = [val.strip() for val in value.strip('][').split(',')]
-    else:
-        result = [value]
+    """Convert input string representing a list or just comma-separated
+    values to the list of strings."""
+    result = [val.strip('"\' ') for val in value.strip('][ ').split(',')]
     return result
+
+
+def string_to_type(value: str, val_type: Type) -> Any:
+    """Convert input string to val_type with special treatment of
+    boolean values"""
+    if val_type == bool:
+        if value == "True" or value == "true":
+            return True
+        elif value == "False" or value == "false":
+            return False
+        else:
+            raise ValueError(
+                "Only 'True' or 'False' can be converted to boolean.")
+    else:
+        return val_type(value)
+
+
+def list_to_re(str_list: Collection) -> str:
+    """Convert input representing collection of strings into a regular
+    expression matching any of the input strings."""
+    re_list = [f'^{val}$' for val in str_list]
+    return r'|'.join(re_list)
 
 
 def user_input_str(
     message: str, default: Any, re_format: str=None
     ) -> Tuple[bool, str]:
-    """A function to request user's input as a string and match it to
-    the regular expression.
+    """Request user's input as a string and match it to the provided
+    regular expression.
 
     Parameters
     ----------
@@ -589,7 +594,7 @@ def user_input_str(
             An input from the user in case it satisfies the regular
             expresion, otherwise the default value.
     """
-    usr_inp = input(f'{message} [{default}] > ')
+    usr_inp = input(f'{message} [{default}] > ').strip()
     if usr_inp != '':
         if re_format is None or re.match(re_format, usr_inp):
             return True, usr_inp
@@ -606,8 +611,7 @@ def user_input_str(
 def user_input_type(
     message: str, default: Any, val_type: Type
     ) -> Tuple[bool, Any]:
-    """A function to request user's input and convert it to the
-    specified type.
+    """Request user's input and convert it to the specified type.
 
     Parameters
     ----------
@@ -628,10 +632,13 @@ def user_input_type(
             An input from the user in case it can be converted to the
             specified type, otherwise the default value.
     """
-    accepted, usr_inp = user_input_str(message, default)
+    re_format = None
+    if val_type == bool:
+        re_format = r'^[Tt]rue$|^[Ff]alse$'
+    accepted, usr_inp = user_input_str(message, default, re_format)
     if accepted:
         try:
-            return True, val_type(usr_inp)
+            return True, string_to_type(usr_inp, val_type)
         except ValueError:
             warnings.warn('Wrong type; kept at default.')
             return False, default
@@ -640,10 +647,11 @@ def user_input_type(
 
 
 def user_input_list(
-    message: str, default: Any, val_type: Type, n_elements: int=-1
+    message: str, default: Any, val_type: Type, n_elements: int=-1,
+    broadcastable: bool=False
     ) -> Tuple[bool, list]:
-    """A function to request user's input as a single value or a list of
-    values and convert it to the list of values with the specified type.
+    """Request user's input as a single value or a list of values and
+    convert it to the list of values with the specified type.
 
     Parameters
     ----------
@@ -656,8 +664,10 @@ def user_input_list(
         Type of the expected user's input.
     n_elements : int, optional
         Expected number of the list elements, by default -1 which means
-        any number. Lists with 1 element are alway accepted and will be
-        broadcasted.
+        any number. Lists with 1 element are accepted in case
+        broadcastable is True.
+    broadcastable : bool, optional
+        Whether a value can be broadcast, by default False.
 
     Returns
     -------
@@ -673,16 +683,57 @@ def user_input_list(
     if accepted:
         usr_inp = string_to_list(usr_inp)
         n_inp = len(usr_inp)
-        if (n_elements > 0) and (n_inp != 1) and (n_inp != n_elements):
+        if ((n_elements > 0) and (n_inp != n_elements)
+            and (not broadcastable or n_inp != 1)):
             warnings.warn(
                 f'Expected a list with {n_elements} elements; '
                 f'kept at default.'
             )
             return False, default
         try:
-            return True, [val_type(val) for val in usr_inp]
+            return True, [string_to_type(val, val_type) for val in usr_inp]
         except ValueError:
             warnings.warn('Wrong type; kept at default.')
             return False, default
     else:
         return False, default
+
+
+def user_input_path(
+    message: str, default: str=None
+    ) -> Tuple[bool, str]:
+    """Request user to provide existing path.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : str, optional
+        Default path to a file or folder, by default None, which will
+        keep requesting user's input until an existing path will be
+        provided.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        bool
+            Whether an input from the user have been accepted.
+        str
+            An input from the user in case specified path exists,
+            otherwise the default value.
+    """
+    while True:
+        accepted, usr_inp = user_input_str(message, default)
+        if accepted:
+            if os.path.exists(usr_inp):
+                return True, usr_inp
+            elif default is not None:
+                warnings.warn('Path does not exist; kept at default.')
+                return False, default
+            else:
+                print(
+                    "Path does not exist - please provide an existing path.")
+        elif default is not None:
+            return False, default
+        else:
+            print("Please provide an existing path.")

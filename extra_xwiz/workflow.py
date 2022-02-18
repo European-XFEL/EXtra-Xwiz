@@ -13,15 +13,10 @@ from . import config
 from . import crystfel_info as cri
 from . import geometry as geo
 from . import utilities as utl
-from .templates import (MAKE_VDS, PROC_VDS_BASH_SLURM, 
-                        PROC_CXI_BASH_SLURM, PARTIALATOR_WRAP, CHECK_HKL_WRAP, 
-                        COMPARE_HKL_WRAP, CELL_EXPLORER_WRAP, POINT_GROUPS,
-                        CONFIG, ADV_CONFIG)
+from . import templates as tmp
 from .summary import (create_new_summary, report_cell_check, report_step_rate,
                       report_total_rate, report_cells, report_merging_metrics,
                       report_reprocess, report_reconfig)
-
-WARN_WRONG_TYPE = 'Wrong type; kept at default.'
 
 
 class Workflow:
@@ -40,29 +35,35 @@ class Workflow:
         self.reprocess = reprocess
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
-        self.data_path = ''                        # for special cheetah tree
+        self.cheetah_data_path = ''                        # for special cheetah tree
         self.exp_ids = []
         conf = config.load_from_file()
 
-        data_path = conf['data']['path']
+        self.data_path = conf['data']['path']
         # 'runs' as a string with coma-separated values is deprecated
         if isinstance(conf['data']['runs'], str):
-            raise ValueError(
-                "'runs' as a coma-separated string is no longer supported."
-                "Please use an integer or a list of integer runs instead."
+            warnings.warn(
+                "'runs' as a coma-separated string is being deprecated, "
+                "please use an integer or a list of integers instead."
             )
-        run_numbers = utl.into_list(conf['data']['runs'])
-        self.data_runs = [f'{data_path}/r{run:04d}' for run in run_numbers]
+            self.data_runs = [
+                int(val) for val in utl.string_to_list(conf['data']['runs'])
+            ]
+        else:
+            self.data_runs = utl.into_list(conf['data']['runs'])
+        self.set_data_runs_paths()
 
         # 'vds_names' as a string with coma-separated values is deprecated
         if (isinstance(conf['data']['vds_names'], str)
             and ',' in conf['data']['vds_names']):
-            raise ValueError(
-                "'vds_names' as a coma-separated string is no longer supported."
-                "Please use a list instead."
+            warnings.warn(
+                "'vds_names' as a coma-separated string is being deprecated, "
+                "please use a list of strings instead."
             )
-        self.vds_names = utl.into_list(conf['data']['vds_names'])
-        if not len(self.vds_names) == len(self.data_runs):
+            self.vds_names = utl.string_to_list(conf['data']['vds_names'])
+        else:
+            self.vds_names = utl.into_list(conf['data']['vds_names'])
+        if not len(self.vds_names) == len(self.data_runs_paths):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         if 'cxi_names' in conf['data']:
@@ -134,6 +135,7 @@ class Workflow:
         self.local_bg_radius = conf['proc_coarse']['local_bg_radius']
         self.max_res = conf['proc_coarse']['max_res']
         self.min_peaks = conf['proc_coarse']['min_peaks']
+        self.indexamajig_n_cores = conf['proc_coarse']['n_cores']
         self.indexamajig_extra_options = conf['proc_coarse']['extra_options']
 
         self.cell_file = conf['unit_cell']['file']
@@ -151,75 +153,21 @@ class Workflow:
         self.cell_info = []
         self.step = 0
 
-    def crystfel_from_config(self, high_res=2.0):
-        """ Inquire the CrystFEL-relevant workflow parameters (provided we are
-            in interactive mode)
-        """
+    def get_cell_keyword(self):
+        """In case cell file exists - prepare a keyword for CrystFEL."""
         cell_keyword = ''
-
-        if self.interactive:
-            _resolution = input(f'Processing resolution limit in Å [{high_res}] > ')
-            if _resolution != '':
-                try:
-                    high_res = float(_resolution)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
-
-            _peak_method = input(f'Peak-finding method to use [{self.peak_method}] > ')
-            if _peak_method != '':
-                if _peak_method in ['peakfinder8', 'zaef']:
-                    self.peak_method = _peak_method
-                    self.overrides['peak_method'] = self.peak_method
-                else:
-                    warnings.warn('Peak-finding method not known; default kept.')
-
-            _peak_threshold = input(f'Peak threshold [{self.peak_threshold}] > ')
-            if _peak_threshold != '':
-                try:
-                    self.peak_threshold = int(_peak_threshold)
-                    self.overrides['peak_threshold'] = self.peak_threshold
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
-
-            _peak_snr = input(f'Peak min. signal-to-noise [{self.peak_snr}] > ')
-            if _peak_snr != '':
-                try:
-                    self.peak_snr = int(_peak_snr)
-                    self.overrides['peak_snr'] = self.peak_snr
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
-
-            _peak_min_px = input(f'Peak min. pixel count [{self.peak_min_px}] > ')
-            if _peak_min_px != '':
-                try:
-                    self.peak_min_px = int(_peak_min_px)
-                    self.overrides['peak_min_px'] = self.peak_min_px
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
-
-            _index_method = input(f'indexing method to use [{self.index_method}] > ')
-            if _index_method != '':
-                if _index_method in ['mosflm', 'xds', 'xgandalf']:
-                    self.index_method = _index_method
-                    self.overrides['index_method'] = self.index_method
-                else:
-                    warnings.warn('Indexing method not known; default kept.')
-
-            _cell_file = input(f'unit cell file to use as estimate [{self.cell_file}] OR [none] > ')
-            if _cell_file != '':
-                if _cell_file == 'none':
-                    print('Processing without prior unit cell - unknown crystal geometry.')
-                self.cell_file = _cell_file
-
         # check cell file presence; expected 'true' for default or overwrite != 'none'
         if os.path.exists(self.cell_file):
             cell_keyword = f'-p {self.cell_file}'
             self.cell_info.append(utl.cell_as_string(self.cell_file))
-            print(' [cell-file check o.k.]')
-        elif self.cell_file != 'none':
-            warnings.warn('Processing without unit cell due to invalid cell file.')
+            print(' [cell-file read - o.k.]')
+        else:
+            warnings.warn(
+                'Unit cell file cannot be read - processing without '
+                'prior crystal geometry.'
+            )
 
-        return high_res, cell_keyword
+        return cell_keyword
 
     def process_slurm_multi(self, job_dir, high_res, cell_keyword,
                             n_nodes, job_duration, filtered=False):
@@ -237,7 +185,7 @@ class Workflow:
         if self.use_cheetah:
             # Not sure, needs to be tested
             utl.make_link(
-                self.data_path,
+                self.cheetah_data_path,
                 job_dir,
                 target_is_directory=True
             )
@@ -267,12 +215,12 @@ class Workflow:
 
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
-                f.write(PROC_CXI_BASH_SLURM % {
+                f.write(tmp.PROC_CXI_BASH_SLURM % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
                     'GEOM': geom_keyword,
                     'CRYSTAL': cell_keyword,
-                    'CORES': 40,
+                    'CORES': self.indexamajig_n_cores,
                     'RESOLUTION': high_res,
                     'PEAKS_HDF5_PATH': self.peaks_path,
                     'INDEX_METHOD': self.index_method,
@@ -281,12 +229,12 @@ class Workflow:
                     'EXTRA_OPTIONS': self.indexamajig_extra_options
                 })
             else:
-                f.write(PROC_VDS_BASH_SLURM % {
+                f.write(tmp.PROC_VDS_BASH_SLURM % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
                     'GEOM': geom_keyword,
                     'CRYSTAL': cell_keyword,
-                    'CORES': 40,
+                    'CORES': self.indexamajig_n_cores,
                     'RESOLUTION': high_res,
                     'PEAK_METHOD': self.peak_method,
                     'PEAK_THRESHOLD': self.peak_threshold,
@@ -321,10 +269,6 @@ class Workflow:
 
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         job_duration = self.duration_hits if filtered else self.duration_all
-        if self.interactive:
-            _duration = input(f'SLURM allocation time [{job_duration}] > ')
-            if _duration != '':
-                job_duration = _duration
 
         report_reconfig(self.list_prefix, self.overrides)
         n_frames = len(self.hit_list) if filtered else self.n_frames_total
@@ -352,10 +296,7 @@ class Workflow:
             storage of experiment identifiers.
         """
         if self.interactive:
-            for i, cxi_name in enumerate(self.cxi_names):
-                _cxi_name = input(f'Cheetah-CXI file name [{cxi_name}] > ')
-                if _cxi_name != '':
-                    self.cxi_names[i] = _cxi_name
+            self.verify_data_config_cheetah()
 
         for i, cxi_name in enumerate(self.cxi_names):
             if not os.path.exists(cxi_name):
@@ -370,31 +311,19 @@ class Workflow:
         """ Make reference to original data in run folders, provide VDS for
             usage with indexamajig (CXI compliant format)
         """
-        print('\n-----   TASK: check/create virtual data sets   -----')
         vds_mask_int = int(self.vds_mask, 16)
         print('Bad-pixel mask value for VDS, as from geom file: ' 
               f'{self.vds_mask} ({vds_mask_int})')
 
         if self.interactive:
-            for i, vds_name in enumerate(self.vds_names):
-                _vds_name = input(f'Virtual data set name [{vds_name}] > ')
-                if _vds_name != '':
-                    self.vds_names[i] = _vds_name
+            self.verify_data_config_vds()
 
         for i, vds_name in enumerate(self.vds_names):
             if not (os.path.exists(f'{self.work_dir}/{vds_name}')
                     or os.path.exists(f'{vds_name}')):
                 print('Creating a VDS file in CXI format ...')
-                if self.interactive:
-                    _data_path = input(f'Data path [{self.data_runs[i]}] > ')
-                    if _data_path != '':
-                        if os.path.exists(_data_path):
-                            print(' [path check o.k.]')
-                            self.data_runs[i] = _data_path
-                        else:
-                            print(' [path not found - config kept]')
                 with open(f'_tmp_{self.list_prefix}_make_vds.sh', 'w') as f:
-                    f.write(MAKE_VDS % {'DATA_PATH': self.data_runs[i],
+                    f.write(tmp.MAKE_VDS % {'DATA_PATH': self.data_runs_paths[i],
                                         'VDS_NAME': vds_name,
                                         'MASK_BAD': vds_mask_int
                                         })
@@ -468,34 +397,203 @@ class Workflow:
                        of.write(ln)
         self.geometry = out_fn
 
-    def prep_distribute(self):
-        """ Inquire enumerator and denominator of the frame distribution onto
-            chunks: total number (in case truncated) and number of jobs/nodes
-        """
+    def set_data_runs_paths(self):
+        """Set values for a list of full paths to the data runs."""
+        self.data_runs_paths = [
+            f'{self.data_path}/r{run:04d}' for run in self.data_runs]
+
+    def verify_data_config_vds(self):
+        """Verify data parameters for generating vds files in the
+        interactive mode."""
+        accepted, self.data_path = utl.user_input_path(
+            "Path to the proposal 'proc' folder", self.data_path
+        )
+        accepted, self.data_runs = utl.user_input_list(
+            "List of runs to process", self.data_runs,
+            val_type = int
+        )
+        self.set_data_runs_paths()
+        accepted, self.vds_names = utl.user_input_list(
+            "Names of the VDS files", self.vds_names,
+            val_type = str, n_elements = len(self.data_runs)
+        )
+
+    def verify_data_config_cheetah(self):
+        """Verify cheetah files with the peaks data in the interactive
+        mode."""
+        accepted, self.cxi_names = utl.user_input_list(
+            "Names of the Cheetah-CXI files", self.cxi_names,
+            val_type = str
+        )
+
+    def verify_data_config_prefix(self):
+        """Verify framework files prefix in the interactive mode."""
+        accepted, self.list_prefix = utl.user_input_str(
+            "Framework files prefix", self.list_prefix
+        )
+
+    def verify_data_config_n_frames(self):
+        """Verify parameters related to the number of frames to be
+        processed in the interactive mode."""
         n_data_files = len(self.exp_ids)
 
         accepted, self.n_frames_offset = utl.user_input_list(
             "Frames offset in each datafile", self.n_frames_offset,
-            val_type = int, n_elements = n_data_files
+            val_type = int, n_elements = n_data_files, broadcastable = True
         )
         accepted, self.n_frames_max = utl.user_input_list(
             "Maximum frames per datafile", self.n_frames_max,
-            val_type = int, n_elements = n_data_files
+            val_type = int, n_elements = n_data_files, broadcastable = True
         )
         accepted, self.n_frames_percent = utl.user_input_list(
             "Percent of frames to process", self.n_frames_percent,
-            val_type = int, n_elements = n_data_files
+            val_type = int, n_elements = n_data_files, broadcastable = True
         )
         accepted, self.n_frames_total = utl.user_input_type(
             "Total maximum number of frames to process", self.n_frames_total,
             val_type = int
         )
+
+    def verify_geom_config(self):
+        """Verify geometry file parameters in the interactive mode."""
+        accepted, self.geometry = utl.user_input_path(
+            "Path to the geometry file", self.geometry
+        )
+
+    def verify_cell_config(self):
+        """Verify cell file parameters in the interactive mode."""
+        accepted, self.cell_file = utl.user_input_path(
+            "Path to the cell parameters file", self.cell_file
+        )
+        accepted, self.cell_run_refine = utl.user_input_type(
+            "Refine cell parameters after the coarse CrystFEL run?",
+            self.cell_run_refine, val_type = bool
+        )
+
+    def verify_slurm_config_all(self):
+        """Verify slurm parameters in the interactive mode for the
+        coarse CrystFEL run."""
+        accepted, self.partition = utl.user_input_str(
+            "SLURM partition", self.partition
+        )
+        accepted, self.duration_all = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_all,
+            re_format = r'\d{1,2}:\d{2}:\d{2}'
+        )
         accepted, self.n_nodes_all = utl.user_input_type(
             "Number of nodes", self.n_nodes_all,
             val_type = int
         )
-        accepted, self.list_prefix = utl.user_input_str(
-            "List file-name prefix", self.list_prefix
+
+    def verify_slurm_config_hits(self):
+        """Verify slurm parameters in the interactive mode for the
+        CrystFEL refine run."""
+        accepted, self.duration_hits = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_hits,
+            re_format = r'\d{1,2}:\d{2}:\d{2}'
+        )
+        accepted, self.n_nodes_hits = utl.user_input_type(
+            "Number of nodes", self.n_nodes_hits,
+            val_type = int
+        )
+
+    def verify_indexamajig_config_all(self):
+        """Verify CrystFEL parameters in the interactive mode for the
+        coarse run."""
+        cri_keys_str = " / ".join(cri.crystfel_info.keys())
+        cri_keys_re = utl.list_to_re(cri.crystfel_info.keys())
+        success, self._crystfel_version = utl.user_input_str(
+            f"CrystFEL version ({cri_keys_str})", self._crystfel_version,
+            cri_keys_re
+        )
+
+        accepted, self.res_lower = utl.user_input_type(
+            "Processing resolution limit in Å for the coarse run",
+            self.res_lower, val_type = float
+        )
+        accepted, self.peak_method = utl.user_input_str(
+            "Peak-finding method to use", self.peak_method
+        )
+        accepted, self.peak_threshold = utl.user_input_type(
+            "Peak threshold", self.peak_threshold,
+            val_type = int
+        )
+        accepted, self.peak_snr = utl.user_input_type(
+            "Peak minimum signal-to-noise", self.peak_snr,
+            val_type = int
+        )
+        accepted, self.peak_min_px = utl.user_input_type(
+            "Peak minimum size in pixels", self.peak_min_px,
+            val_type = int
+        )
+        accepted, self.peak_max_px = utl.user_input_type(
+            "Peak maximum size in pixels", self.peak_max_px,
+            val_type = int
+        )
+        accepted, self.peaks_path = utl.user_input_str(
+            "Path to the peaks data in case of Cheetah CXI with peaks",
+            self.peaks_path
+        )
+        accepted, self.index_method = utl.user_input_str(
+            "Indexing method", self.index_method
+        )
+        accepted, self.local_bg_radius = utl.user_input_type(
+            "Radius in pixels for local background estimation",
+            self.local_bg_radius, val_type = int
+        )
+        accepted, self.max_res = utl.user_input_type(
+            "Maximum radius from the detector center to accepted peaks",
+            self.max_res, val_type = int
+        )
+        accepted, self.min_peaks = utl.user_input_type(
+            "Minimum number of peaks to try indexing", self.min_peaks,
+            val_type = int
+        )
+        accepted, self.indexamajig_n_cores = utl.user_input_type(
+            "Number of cores to be used by each CrystFEL job",
+            self.indexamajig_n_cores, val_type = int
+        )
+        accepted, self.indexamajig_extra_options = utl.user_input_str(
+            "Any extra CrystFEL options", self.indexamajig_extra_options
+        )
+
+    def verify_indexamajig_config_hits(self):
+        """Verify CrystFEL parameters in the interactive mode for the
+        refine run."""
+        accepted, self.res_higher = utl.user_input_type(
+            "Processing resolution limit in Å for the refine run",
+            self.res_higher, val_type = float
+        )
+        accepted, self.integration_radii = utl.user_input_str(
+            "Integration radii around predicted Bragg-peak positions",
+            self.integration_radii, re_format = r'\d,\d,\d'
+        )
+
+    def verify_frame_filter_config(self):
+        """Verify frame filter parameters in the interactive mode."""
+        accepted, self.cell_tolerance = utl.user_input_type(
+            "Match tolerance of frame-cells vs. expectation",
+            self.cell_tolerance, val_type = float
+        )
+
+    def verify_merging_config(self):
+        """Verify reflections merging parameters in the interactive
+        mode."""
+        point_groups_re = utl.list_to_re(tmp.POINT_GROUPS)
+        accepted, self.point_group = utl.user_input_str(
+            "Reflections merging symmetry point group", self.point_group,
+            re_format = point_groups_re
+        )
+        accepted, self.scale_model = utl.user_input_str(
+            "Partiality model", self.scale_model
+        )
+        accepted, self.scale_iter = utl.user_input_type(
+            "Number of scaling and post refinement cycles", self.scale_iter,
+            val_type = int
+        )
+        accepted, self.max_adu = utl.user_input_type(
+            "Maximum peak value to be merged", self.max_adu,
+            val_type = int
         )
 
 
@@ -504,9 +602,7 @@ class Workflow:
             accounting for the number to be processed, onto N chunks, and write
             into N temporary .lst files
         """
-        print('\n-----   TASK: prepare distributed computing   -----')
-        if self.interactive:
-            self.prep_distribute()
+        print('\n-----   TASK: prepare distributed computing   -----\n')
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
         n_data_files = len(self.exp_ids)
 
@@ -572,20 +668,19 @@ class Workflow:
             amount of frames to be processed, onto N chunks, and write the
             file paths into N temporary .lst files
         """
-        print('\n-----   TASK: analyse and distribute Cheetah input   -----')
-        n_files, average_n_frames = utl.scan_cheetah_proc_dir(self.data_path)
+        print('\n-----   TASK: analyse and distribute Cheetah input   -----\n')
+        n_files, average_n_frames = utl.scan_cheetah_proc_dir(self.cheetah_data_path)
         print('total number of processed files:   {:5d}'.format(n_files))
         print('average number of frames per file: {:.1f}'.format(average_n_frames))
         print('estimated total number of frames:',
               int(average_n_frames * n_files))
-        self.prep_distribute()
         n_used_files = int(round(self.n_frames_total / average_n_frames))
         if n_used_files > n_files:
             warnings.warn('Number of used files from requested number of'
                           f' frames exceeds total, reset to {n_files}.')
             n_used_files = n_files
         file_indices = np.array_split(np.arange(n_used_files), self.n_nodes_all)
-        file_items = sorted([os.path.join(dp, f) for dp, dn, fn in os.walk(self.data_path) for f in fn])
+        file_items = sorted([os.path.join(dp, f) for dp, dn, fn in os.walk(self.cheetah_data_path) for f in fn])
         for chunk, indices in enumerate(file_indices):
             print(len(indices), end=' ')
             with open(f'{self.list_prefix}_{chunk}.lst', 'w') as f:
@@ -597,13 +692,6 @@ class Workflow:
         """ Split up the list of indexed frames (also stored to one file) onto
             N chunks and write N temporary .lst files
         """
-        if self.interactive:
-            _n_nodes = input(f'Number of nodes [{self.n_nodes_hits}] > ')
-            if _n_nodes != '':
-                try:
-                    self.n_nodes_hits = int(_n_nodes)
-                except TypeError:
-                    warnings.warn(WARN_WRONG_TYPE)
         n_filtered = len(self.hit_list)
         split_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
         for chunk, sub_indices in enumerate(split_indices):
@@ -651,35 +739,28 @@ class Workflow:
         crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
 
         with open('_cell_explorer.sh', 'w') as f:
-            f.write(CELL_EXPLORER_WRAP % {
+            f.write(tmp.CELL_EXPLORER_WRAP % {
                 'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix
             })
         subprocess.check_output(['sh', '_cell_explorer.sh'])
-        _explorer_cell = ''
-        while not os.path.exists(_explorer_cell):
-            _explorer_cell = \
-                input(' Name of the cell file created with cell explorer > ')
-        self.cell_file = _explorer_cell
-        """
-        # the following is likely premature, respectively redundant if we have
-          another SLURM-distributed run vs. all frames:
-        self.hit_list, _ = \
-            utl.get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file)
-        self.write_hit_list()
-        """
+        _, self.cell_file = utl.user_input_path(
+            "Path to the cell parameters file created with the cell explorer")
+
 
     def fit_filtered_crystals(self):
         """Select diffraction frames from match vs. good cell
         """
         self.hit_list, self.cell_ensemble = \
-            utl.get_crystal_frames(f'{self.list_prefix}.stream', self.cell_file,
-                               self.cell_tolerance)
+            utl.get_crystal_frames(
+                f'{self.list_prefix}.stream', self.cell_file,
+                self.cell_tolerance
+            )
         print('Overall indexing rate is', len(self.hit_list) / self.n_frames_total)
         report_cell_check(self.list_prefix, len(self.hit_list), self.n_frames_total)
         self.write_hit_list()
         if self.cell_run_refine:
-            print('\n-----   TASK: refine unit cell parameters   -----')
+            print('\n-----   TASK: refine unit cell parameters   -----\n')
             refined_cell = utl.fit_unit_cell(self.cell_ensemble)
             utl.replace_cell(self.cell_file, refined_cell)
             self.cell_file = f'{self.cell_file}_refined'
@@ -699,7 +780,7 @@ class Workflow:
 
         # scale and average using partialator
         with open(f'{part_dir}/_tmp_partialator.sh', 'w') as f:
-            f.write(PARTIALATOR_WRAP % {
+            f.write(tmp.PARTIALATOR_WRAP % {
                 'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
@@ -707,13 +788,13 @@ class Workflow:
                 'MODEL': self.scale_model,
                 'MAX_ADU': self.max_adu
             })
-        out = subprocess.check_output(['sh', '_tmp_partialator.sh'],
+        subprocess.check_output(['sh', '_tmp_partialator.sh'],
             cwd=part_dir, stderr=subprocess.STDOUT)
 
         log_items = []
         # create simple resolution-bin table
         with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
-            f.write(CHECK_HKL_WRAP % {
+            f.write(tmp.CHECK_HKL_WRAP % {
                 'IMPORT_CRYSTFEL': crystfel_import,
                 'PREFIX': self.list_prefix,
                 'POINT_GROUP': self.point_group,
@@ -727,7 +808,7 @@ class Workflow:
         # create resolution-bin tables based on half-sets
         for i in range(3):
             with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
-                f.write(COMPARE_HKL_WRAP % {
+                f.write(tmp.COMPARE_HKL_WRAP % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': self.list_prefix,
                     'POINT_GROUP': self.point_group,
@@ -748,45 +829,23 @@ class Workflow:
         """ Last pass of the workflow:
             re-indexing, integration and scaling/merging
         """
-        print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------')
-        self.distribute_hits()
-        res_limit, cell_keyword = \
-            self.crystfel_from_config(high_res=self.res_higher)
+        print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------\n')
+
+        # Verify SLURM nodes config for the second CrystFEL run:
         if self.interactive:
-            _int_radii = input('Integration radii around predicted Bragg-peak'
-                               f'positions [{self.integration_radii}] > ')
-            if _int_radii != '':
-                try:
-                    _ = [int(x) for x in _int_radii.split(',')][:3]
-                    self.integration_radii = _int_radii
-                except ValueError:
-                    warnings.warn('Wrong format or types for integration-radii parameter')
-        self.wrap_process(res_limit, cell_keyword, filtered=True)
+            self.verify_slurm_config_hits()
+            self.verify_indexamajig_config_hits()
+
+        self.distribute_hits()
+        cell_keyword = self.get_cell_keyword()
+
+        self.wrap_process(self.res_higher, cell_keyword, filtered=True)
         report_total_rate(self.list_prefix, self.n_frames_total)
         report_cells(self.list_prefix, self.cell_info)
 
-        print('\n-----   TASK: scale/merge data and create statistics -----')
+        print('\n-----   TASK: scale/merge data and create statistics -----\n')
         if self.interactive:
-            _point_group = input(f'Point group symmetry [{self.point_group}] > ')
-            if _point_group != '':
-                if _point_group in POINT_GROUPS:
-                    self.point_group = _point_group
-                else:
-                    warnings.warn('Point group not recognized')
-                    print('[default kept]')
-            _scale_model = input(f'Scaling model to use [{self.scale_model}] > ')
-            if _scale_model != '':
-                if _scale_model in ['unity', 'scsphere']:
-                    self.scale_model = _scale_model
-                else:
-                    warnings.warn('Model type not recognized')
-                    print('[default kept]')
-            _scale_iter = input(f'Number of iterations [{self.scale_iter}] > ')
-            if _scale_iter != '':
-                try:
-                    self.scale_iter = int(_scale_iter)
-                except TypeError:
-                    warnings.warn(WARN_WRONG_TYPE)
+            self.verify_merging_config()
 
         self.merge_bragg_obs()
 
@@ -794,14 +853,10 @@ class Workflow:
         """ Verify the presence of mandatory files from a previous session
         """
         if self.interactive:
-            _list_prefix = input(f'List file-name prefix [{self.list_prefix}] > ')
-            if _list_prefix != '':
-                self.list_prefix = _list_prefix
-            _cell_file = input(f'Unit cell file [{self.cell_file}_refined] > ')
-            if _cell_file == '':
+            self.verify_data_config_prefix()
+            self.verify_cell_config()
+            if self.cell_run_refine:
                 self.cell_file = f'{self.cell_file}_refined'
-            else:
-                self.cell_file = f'{_cell_file}_refined'
         n_issues = 0
         if not os.path.exists(f'{self.list_prefix}_hits.lst'):
             warnings.warn('Cannot find pre-selection of indexed detector frames')
@@ -815,9 +870,14 @@ class Workflow:
             exit()
         self.hit_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
 
+
     def manage(self):
         """ Parent workflow structure implementation
         """
+        # verify framework files prefix
+        if self.interactive:
+            self.verify_data_config_prefix()
+
         create_new_summary(self.list_prefix, self.config, self.interactive,
                            self.use_cheetah)
 
@@ -827,58 +887,59 @@ class Workflow:
             self.process_late()
             return
 
-        # principal modes of input and operation
-        if self.use_cheetah:
-            # Cheetah multi-folder HDF5 w/o peaks (rare)
-            self.distribute_cheetah()
-        else:
-            # single CXI or VDS-CXI data set per run (common)
+        print('\n-----   TASK: check / prepare data   -----\n')
+
+        if not self.use_cheetah:
             if self.use_peaks:
                 # real CXI data set from Cheetah with peaks
                 self.check_cxi()
             else:
                 # virtual CXI data set pointing to EuXFEL proc run
                 self.make_virtual()
+
+        print('\n-----   TASK: distribute data over SLURM nodes   -----\n')
+
+        if self.interactive:
+            self.verify_data_config_n_frames()
+            self.verify_slurm_config_all()
+
+        # principal modes of input and operation
+        if self.use_cheetah:
+            # Cheetah multi-folder HDF5 w/o peaks (rare)
+            self.distribute_cheetah()
+        else:
+            # single CXI or VDS-CXI data set per run (common)
             self.distribute_data()
 
-        print('\n-----   TASK: run CrystFEL (I)   -----')
+        print('\n-----   TASK: run CrystFEL (I)   -----\n')
+
         if self.interactive:
-            _geometry = input(f'Path to geometry file [{self.geometry}] > ')
-            if _geometry != '':
-                if os.path.exists(_geometry):
-                    self.geometry = _geometry
-                    print(' [check o.k.]')
-                else:
-                    warnings.warn('Geometry file not found; default kept.')
+            self.verify_geom_config()
         if geo.check_geom_format(self.geometry, self.use_peaks) == False:
             self.transfer_geometry()
             print(f'! Geometry transferred to new file "{self.geometry}".')
 
-        res_limit, cell_keyword = \
-            self.crystfel_from_config(high_res=self.res_lower)
-        self.wrap_process(res_limit, cell_keyword, filtered=False)
+        if self.interactive:
+            self.verify_cell_config()
+        cell_keyword = self.get_cell_keyword()
+
+        if self.interactive:
+            self.verify_indexamajig_config_all()
+
+        self.wrap_process(self.res_lower, cell_keyword, filtered=False)
 
         if not os.path.exists(self.cell_file):
-            print('\n-----   TASK: determine initial unit cell and re-run CrystFEL')
+            print('\n-----   TASK: determine initial unit cell and re-run '
+                  'CrystFEL   -----\n')
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
-            if self.use_peaks:
-                self.distribute_cheetah()
-            else:
-                self.distribute_data()
-            res_limit, cell_keyword = \
-                self.crystfel_from_config(high_res=self.res_lower)
-            self.wrap_process(res_limit, cell_keyword, filtered=False)
+            cell_keyword = self.get_cell_keyword()
+            self.wrap_process(self.res_lower, cell_keyword, filtered=False)
 
         print('\n-----   TASK: filter crystal frames according to the'
-              ' unit cell parameters   -----')
+              ' unit cell parameters   -----\n')
         if self.interactive:
-            _cell_tolerance = input(f'Match tolerance of frame-cells vs. expectation [{self.cell_tolerance}] > ')
-            if _cell_tolerance != '':
-                try:
-                    self.cell_tolerance = float(_cell_tolerance)
-                except TypeError:
-                    warnings.warn('Wrong type; kept at default')
+            self.verify_frame_filter_config()
         # first filter indexed frames, then update cell based on crystals found
         self.fit_filtered_crystals()
 
@@ -927,9 +988,9 @@ def main(argv=None):
     if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
         print('Configuration file is not present, will be created.')
         if args.advance_config:
-            config.create_file(ADV_CONFIG)
+            config.create_file(tmp.ADV_CONFIG)
         else:
-            config.create_file(CONFIG)
+            config.create_file(tmp.CONFIG)
         print('Please rerun now.')
         exit()
     elif args.advance_config:
