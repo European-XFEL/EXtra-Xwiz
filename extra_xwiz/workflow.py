@@ -43,7 +43,7 @@ class Workflow:
         # 'runs' as a string with coma-separated values is deprecated
         if isinstance(conf['data']['runs'], str):
             warnings.warn(
-                "'runs' as a coma-separated string is being deprecated, "
+                "'runs' as a comma-separated string is being deprecated, "
                 "please use an integer or a list of integers instead."
             )
             self.data_runs = [
