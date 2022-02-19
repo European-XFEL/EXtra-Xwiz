@@ -37,7 +37,7 @@ peak_min_px = 1
 peak_max_px = 2
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
-n_cores = 40
+n_cores = -1
 local_bg_radius = 3
 max_res = 1200
 min_peaks = 0
@@ -105,7 +105,7 @@ peak_min_px = 1
 peak_max_px = 2
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
-n_cores = 40
+n_cores = -1
 local_bg_radius = 3
 max_res = 1200
 min_peaks = 0
@@ -160,12 +160,20 @@ echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 echo ""
 indexamajig --version
 echo ""
+N_CORES_USE=%(CORES)s
+N_CORES_AVAL="$(nproc)"
+if [[ $N_CORES_USE -lt 0 ]]
+then
+  N_CORES_USE=$N_CORES_AVAL
+fi
+echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
   -g %(GEOM)s %(CRYSTAL)s \\
-  -j %(CORES)s \\
+  -j $N_CORES_USE \\
   --highres=%(RESOLUTION)s \\
   --peaks=%(PEAK_METHOD)s \\
   --min-snr=%(PEAK_SNR)s \\
@@ -199,12 +207,20 @@ echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 echo ""
 indexamajig --version
 echo ""
+N_CORES_USE=%(CORES)s
+N_CORES_AVAL="$(nproc)"
+if [[ $N_CORES_USE -lt 0 ]]
+then
+  N_CORES_USE=$N_CORES_AVAL
+fi
+echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
   -g %(GEOM)s %(CRYSTAL)s \\
-  -j %(CORES)s \\
+  -j $N_CORES_USE \\
   --highres=%(RESOLUTION)s \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
