@@ -72,21 +72,24 @@ class Workflow:
             self.cxi_names = ['']
 
         if 'n_frames_offset' in conf['data']:
-            self.n_frames_offset = conf['data']['n_frames_offset']
+            self.n_frames_offset = utl.into_list(
+                conf['data']['n_frames_offset'])
         # Check for deprecated parameter
         elif 'frame_offset' in conf['data']:
             warnings.warn(
                 "'frame_offset' is being deprecated, please use "
                 "'n_frames_offset' instead.")
-            self.n_frames_offset = conf['data']['frame_offset']
+            self.n_frames_offset = utl.into_list(conf['data']['frame_offset'])
         else:
             self.n_frames_offset = 0
         if 'n_frames_percent' in conf['data']:
-            self.n_frames_percent = conf['data']['n_frames_percent']
+            self.n_frames_percent = utl.into_list(
+                conf['data']['n_frames_percent'])
         else:
             self.n_frames_percent = 100
         if 'n_frames_max' in conf['data']:
-            self.n_frames_max = conf['data']['n_frames_max']
+            self.n_frames_max = utl.into_list(
+                conf['data']['n_frames_max'])
         else:
             self.n_frames_max = -1
         if 'n_frames_total' in conf['data']:
