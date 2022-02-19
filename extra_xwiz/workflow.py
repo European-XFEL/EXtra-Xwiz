@@ -57,7 +57,7 @@ class Workflow:
         if (isinstance(conf['data']['vds_names'], str)
             and ',' in conf['data']['vds_names']):
             warnings.warn(
-                "'vds_names' as a coma-separated string is being deprecated, "
+                "'vds_names' as a comma-separated string is being deprecated, "
                 "please use a list of strings instead."
             )
             self.vds_names = utl.string_to_list(conf['data']['vds_names'])
