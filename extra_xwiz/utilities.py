@@ -527,6 +527,8 @@ def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
     """
     if '.' in parameter:
         key, new_parameter = parameter.split('.', 1)
+        if key not in dictionary:
+            dictionary[key] = {}
         set_dotdict_val(dictionary[key], new_parameter, value)
     else:
         dictionary[parameter] = value

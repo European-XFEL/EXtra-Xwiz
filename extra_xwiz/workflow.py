@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from collections import OrderedDict
 import fileinput
 from glob import glob
 import h5py
@@ -14,9 +13,7 @@ from . import crystfel_info as cri
 from . import geometry as geo
 from . import utilities as utl
 from . import templates as tmp
-from .summary import (create_new_summary, report_cell_check, report_step_rate,
-                      report_total_rate, report_cells, report_merging_metrics,
-                      report_reprocess, report_reconfig)
+from . import summary as smr
 
 
 class Workflow:
@@ -150,7 +147,7 @@ class Workflow:
         self.scale_iter = conf['merging']['scaling_iterations']
         self.max_adu = conf['merging']['max_adu']
         self.config = conf      # store the config dictionary to report later
-        self.overrides = OrderedDict()    # collect optional config overrides
+        self.overrides = {}     # collect optional config overrides
         self.hit_list = []
         self.cell_ensemble = []
         self.cell_info = []
@@ -276,7 +273,6 @@ class Workflow:
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         job_duration = self.duration_hits if filtered else self.duration_all
 
-        report_reconfig(self.list_prefix, self.overrides)
         n_frames = len(self.hit_list) if filtered else self.n_frames_total
 
         job_id = self.process_slurm_multi(
@@ -291,7 +287,7 @@ class Workflow:
         self.concat(job_dir, filtered)
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
-        report_step_rate(
+        smr.report_step_rate(
             self.list_prefix, stream_file_name, self.step, res_limit,
             n_proc_frames
         )
@@ -417,15 +413,26 @@ class Workflow:
         accepted, self.data_path = utl.user_input_path(
             "Path to the proposal 'proc' folder", self.data_path
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.path", self.data_path)
+
         accepted, self.data_runs = utl.user_input_list(
             "List of runs to process", self.data_runs,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.runs", self.data_runs)
         self.set_data_runs_paths()
+
         accepted, self.vds_names = utl.user_input_list(
             "Names of the VDS files", self.vds_names,
             val_type = str, n_elements = len(self.data_runs)
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.vds_names", self.vds_names)
 
     def verify_data_config_cheetah(self):
         """Verify cheetah files with the peaks data in the interactive
@@ -434,12 +441,18 @@ class Workflow:
             "Names of the Cheetah-CXI files", self.cxi_names,
             val_type = str
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.cxi_names", self.cxi_names)
 
     def verify_data_config_prefix(self):
         """Verify framework files prefix in the interactive mode."""
         accepted, self.list_prefix = utl.user_input_str(
             "Framework files prefix", self.list_prefix
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.list_prefix", self.list_prefix)
 
     def verify_data_config_n_frames(self):
         """Verify parameters related to the number of frames to be
@@ -450,34 +463,59 @@ class Workflow:
             "Frames offset in each datafile", self.n_frames_offset,
             val_type = int, n_elements = n_data_files, broadcastable = True
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.n_frames_offset", self.n_frames_offset)
+
         accepted, self.n_frames_max = utl.user_input_list(
             "Maximum frames per datafile", self.n_frames_max,
             val_type = int, n_elements = n_data_files, broadcastable = True
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.n_frames_max", self.n_frames_max)
+
         accepted, self.n_frames_percent = utl.user_input_list(
             "Percent of frames to process", self.n_frames_percent,
             val_type = int, n_elements = n_data_files, broadcastable = True
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.n_frames_percent", self.n_frames_percent)
+
         accepted, self.n_frames_total = utl.user_input_type(
             "Total maximum number of frames to process", self.n_frames_total,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "data.n_frames_total", self.n_frames_total)
 
     def verify_geom_config(self):
         """Verify geometry file parameters in the interactive mode."""
         accepted, self.geometry = utl.user_input_path(
             "Path to the geometry file", self.geometry
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "geom.file_path", self.geometry)
 
     def verify_cell_config(self):
         """Verify cell file parameters in the interactive mode."""
         accepted, self.cell_file = utl.user_input_path(
             "Path to the cell parameters file", self.cell_file
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "unit_cell.file", self.cell_file)
+
         accepted, self.cell_run_refine = utl.user_input_type(
             "Refine cell parameters after the coarse CrystFEL run?",
             self.cell_run_refine, val_type = bool
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "unit_cell.run_refine", self.cell_run_refine)
 
     def verify_slurm_config_all(self):
         """Verify slurm parameters in the interactive mode for the
@@ -485,14 +523,25 @@ class Workflow:
         accepted, self.partition = utl.user_input_str(
             "SLURM partition", self.partition
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.partition", self.partition)
+
         accepted, self.duration_all = utl.user_input_str(
             "SLURM jobs maximum duration", self.duration_all,
             re_format = r'\d{1,2}:\d{2}:\d{2}'
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.duration_all", self.duration_all)
+
         accepted, self.n_nodes_all = utl.user_input_type(
             "Number of nodes", self.n_nodes_all,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.n_nodes_all", self.n_nodes_all)
 
     def verify_slurm_config_hits(self):
         """Verify slurm parameters in the interactive mode for the
@@ -501,70 +550,139 @@ class Workflow:
             "SLURM jobs maximum duration", self.duration_hits,
             re_format = r'\d{1,2}:\d{2}:\d{2}'
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.duration_hits", self.duration_hits)
+
         accepted, self.n_nodes_hits = utl.user_input_type(
             "Number of nodes", self.n_nodes_hits,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.n_nodes_hits", self.n_nodes_hits)
 
     def verify_indexamajig_config_all(self):
         """Verify CrystFEL parameters in the interactive mode for the
         coarse run."""
         cri_keys_str = " / ".join(cri.crystfel_info.keys())
         cri_keys_re = utl.list_to_re(cri.crystfel_info.keys())
-        success, self._crystfel_version = utl.user_input_str(
+        accepted, self._crystfel_version = utl.user_input_str(
             f"CrystFEL version ({cri_keys_str})", self._crystfel_version,
             cri_keys_re
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "crystfel.version", self._crystfel_version)
 
         accepted, self.res_lower = utl.user_input_type(
             "Processing resolution limit in Å for the coarse run",
             self.res_lower, val_type = float
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.resolution", self.res_lower)
+
         accepted, self.peak_method = utl.user_input_str(
             "Peak-finding method to use", self.peak_method
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peak_method", self.peak_method)
+
         accepted, self.peak_threshold = utl.user_input_type(
             "Peak threshold", self.peak_threshold,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peak_threshold",
+                self.peak_threshold
+            )
+
         accepted, self.peak_snr = utl.user_input_type(
             "Peak minimum signal-to-noise", self.peak_snr,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peak_snr", self.peak_snr)
+
         accepted, self.peak_min_px = utl.user_input_type(
             "Peak minimum size in pixels", self.peak_min_px,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peak_min_px", self.peak_min_px)
+
         accepted, self.peak_max_px = utl.user_input_type(
             "Peak maximum size in pixels", self.peak_max_px,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peak_max_px", self.peak_max_px)
+
         accepted, self.peaks_path = utl.user_input_str(
             "Path to the peaks data in case of Cheetah CXI with peaks",
             self.peaks_path
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.peaks_hdf5_path", self.peaks_path)
+
         accepted, self.index_method = utl.user_input_str(
             "Indexing method", self.index_method
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.index_method", self.index_method)
+
         accepted, self.local_bg_radius = utl.user_input_type(
             "Radius in pixels for local background estimation",
             self.local_bg_radius, val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.local_bg_radius",
+                self.local_bg_radius
+            )
+
         accepted, self.max_res = utl.user_input_type(
             "Maximum radius from the detector center to accepted peaks",
             self.max_res, val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.max_res", self.max_res)
+
         accepted, self.min_peaks = utl.user_input_type(
             "Minimum number of peaks to try indexing", self.min_peaks,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.min_peaks", self.min_peaks)
+
         accepted, self.indexamajig_n_cores = utl.user_input_type(
             "Number of cores to be used by each CrystFEL job",
             self.indexamajig_n_cores, val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.n_cores",
+                self.indexamajig_n_cores
+            )
+
         accepted, self.indexamajig_extra_options = utl.user_input_str(
             "Any extra CrystFEL options", self.indexamajig_extra_options
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.extra_options",
+                self.indexamajig_extra_options
+            )
 
     def verify_indexamajig_config_hits(self):
         """Verify CrystFEL parameters in the interactive mode for the
@@ -573,10 +691,19 @@ class Workflow:
             "Processing resolution limit in Å for the refine run",
             self.res_higher, val_type = float
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_fine.resolution", self.res_higher)
+
         accepted, self.integration_radii = utl.user_input_str(
             "Integration radii around predicted Bragg-peak positions",
             self.integration_radii, re_format = r'\d,\d,\d'
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_fine.integration_radii",
+                self.integration_radii
+            )
 
     def verify_frame_filter_config(self):
         """Verify frame filter parameters in the interactive mode."""
@@ -584,6 +711,11 @@ class Workflow:
             "Match tolerance of frame-cells vs. expectation",
             self.cell_tolerance, val_type = float
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "frame_filter.match_tolerance",
+                self.cell_tolerance
+            )
 
     def verify_merging_config(self):
         """Verify reflections merging parameters in the interactive
@@ -593,17 +725,32 @@ class Workflow:
             "Reflections merging symmetry point group", self.point_group,
             re_format = point_groups_re
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "merging.point_group", self.point_group)
+
         accepted, self.scale_model = utl.user_input_str(
             "Partiality model", self.scale_model
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "merging.scaling_model", self.scale_model)
+
         accepted, self.scale_iter = utl.user_input_type(
             "Number of scaling and post refinement cycles", self.scale_iter,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "merging.scaling_iterations", self.scale_iter)
+
         accepted, self.max_adu = utl.user_input_type(
             "Maximum peak value to be merged", self.max_adu,
             val_type = int
         )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "merging.max_adu", self.max_adu)
 
 
     def distribute_data(self):
@@ -768,7 +915,9 @@ class Workflow:
         n_cryst = len(self.hit_list)
         index_rate = 100.0 * n_cryst / self.n_proc_frames_all
         print(f"Overall indexing rate is {index_rate:5.2f} %")
-        report_cell_check(self.list_prefix, n_cryst, self.n_proc_frames_all)
+        smr.report_cell_check(
+            self.list_prefix, n_cryst, self.n_proc_frames_all
+        )
         self.write_hit_list()
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----\n')
@@ -834,7 +983,7 @@ class Workflow:
 
         for fn in glob(f'{part_dir}/_tmp*'):
             os.remove(fn)
-        report_merging_metrics(part_dir, self.list_prefix, log_items)
+        smr.report_merging_metrics(part_dir, self.list_prefix, log_items)
 
     def process_late(self):
         """ Last pass of the workflow:
@@ -852,14 +1001,18 @@ class Workflow:
 
         self.n_proc_frames_hits = self.wrap_process(
             self.res_higher, cell_keyword, filtered=True)
-        report_total_rate(self.list_prefix, self.n_proc_frames_all)
-        report_cells(self.list_prefix, self.cell_info)
+        smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
+        smr.report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
         if self.interactive:
             self.verify_merging_config()
 
         self.merge_bragg_obs()
+
+        # report all config parameters modified in the interactive mode
+        smr.report_reconfig(self.list_prefix, self.overrides)
+
 
     def check_late_entrance(self):
         """ Verify the presence of mandatory files from a previous session
@@ -890,12 +1043,12 @@ class Workflow:
         if self.interactive:
             self.verify_data_config_prefix()
 
-        create_new_summary(self.list_prefix, self.config, self.interactive,
-                           self.use_cheetah)
+        smr.create_new_summary(
+            self.list_prefix, self.config, self.interactive, self.use_cheetah)
 
         if self.reprocess:
             self.check_late_entrance()
-            report_reprocess(self.list_prefix)
+            smr.report_reprocess(self.list_prefix)
             self.process_late()
             return
 
