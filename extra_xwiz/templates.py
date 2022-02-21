@@ -7,7 +7,7 @@ POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
 
 CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
+proposal = 700000
 runs = [30]
 n_frames_total = 100000
 vds_names = ["xmpl_30_vds.cxi"]
@@ -63,7 +63,7 @@ max_adu = 100000
 
 ADV_CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
+proposal = 700000
 runs = [30]
 n_frames_offset = 0
 n_frames_max = -1

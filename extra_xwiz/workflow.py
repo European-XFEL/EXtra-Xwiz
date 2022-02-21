@@ -4,9 +4,12 @@ from glob import glob
 import h5py
 import numpy as np
 import os
+import re
 import shutil
 import subprocess
 import warnings
+
+import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
@@ -36,7 +39,21 @@ class Workflow:
         self.exp_ids = []
         conf = config.load_from_file()
 
-        self.data_path = conf['data']['path']
+        if 'proposal' in conf['data']:
+            self.data_proposal = conf['data']['proposal']
+        elif 'path' in conf['data']:
+            warnings.warn(
+                "Configuration option 'data.path' is deprecated, please "
+                "specify proposal number as 'data.proposal' instead."
+            )
+            mobj = re.search(r'/p(\d{6})', conf['data']['path'])
+            if mobj is not None:
+                self.data_proposal = int(mobj.group(1))
+            else:
+                raise ValueError(
+                    "Could not retrieve proposal number from data path.")
+        else:
+            raise ValueError("Please provide proposal number in the config.")
         # 'runs' as a string with coma-separated values is deprecated
         if isinstance(conf['data']['runs'], str):
             warnings.warn(
@@ -405,17 +422,19 @@ class Workflow:
     def set_data_runs_paths(self):
         """Set values for a list of full paths to the data runs."""
         self.data_runs_paths = [
-            f'{self.data_path}/r{run:04d}' for run in self.data_runs]
+            fdx.find_run(self.data_proposal, run, True)
+            for run in self.data_runs
+        ]
 
     def verify_data_config_vds(self):
         """Verify data parameters for generating vds files in the
         interactive mode."""
-        accepted, self.data_path = utl.user_input_path(
-            "Path to the proposal 'proc' folder", self.data_path
+        accepted, self.data_proposal = utl.user_input_type(
+            "Proposal number", self.data_proposal, val_type = int
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "data.path", self.data_path)
+                self.overrides, "data.proposal", self.data_proposal)
 
         accepted, self.data_runs = utl.user_input_list(
             "List of runs to process", self.data_runs,
