@@ -1,14 +1,16 @@
 """Utilities"""
 
+from ast import Pass
 from getpass import getuser
 from glob import glob
 import h5py
 import numpy as np
+import re
 from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
-from typing import Any
+from typing import Any, Type, Tuple, Collection
 import warnings
 
 # Local imports
@@ -54,18 +56,6 @@ def fit_gauss_curve(sample):
     except RuntimeError:
         p = list(p0)
     return p[1]
-
-
-def seconds(tm_str):
-    """ Convert a time string HH:MM:SS to integer-number seconds
-    """
-    units = tm_str.split(':')
-    secs = 0
-    for i in range(len(units)):
-        j = len(units) - 1 - i
-        secs += int(units[j]) * pow(60, i)
-    # print(secs)
-    return secs
 
 
 def print_progress_bar(
@@ -151,7 +141,7 @@ def calc_progress(out_logs, n_total, crystfel_version):
     return n_frames_total
 
 
-def wait_or_cancel(job_id, job_dir, n_total,crystfel_version):
+def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
     """
     Monitor slurm jobs and prepare progress bar.
 
@@ -178,6 +168,7 @@ def wait_or_cancel(job_id, job_dir, n_total,crystfel_version):
     if n_proc < n_total:
         warnings.warn(
             f"Not all frames were processed by slurm: {n_proc}/{n_total}.")
+    return n_proc
 
 
 def cell_in_tolerance(probe_constants, reference_file, tolerance):
@@ -259,6 +250,7 @@ def replace_cell(fn, const_values):
     """ Write a new cell file based on the provided one, containing the new
         constants as defined by fitting.
     """
+    fn_refined = get_refined_cell_name(fn)
     if fn[-5:] == '.cell':
         const_names = ['a', 'b', 'c', 'al', 'be', 'ga']
         cell_dict = {}
@@ -270,7 +262,7 @@ def replace_cell(fn, const_values):
             for ln in f_in:
                 lines.append(ln)
         # write new cell file
-        with open(f'{fn}_refined', 'w') as f_out:
+        with open(fn_refined, 'w') as f_out:
             for ln in lines:
                 items = ln.split()
                 if len(items) >= 3 and items[0] in const_names:
@@ -285,7 +277,7 @@ def replace_cell(fn, const_values):
             for ln in f_in:
                 if ln[:6] == 'CRYST1':
                     geom = ' '.join(ln.split()[7:])
-        with open(f'{fn}_refined', 'w') as f_out:
+        with open(fn_refined, 'w') as f_out:
             new_cryst = 'CRYST1'
             new_cryst += ''.join([f'{v:9.3f}' for v in const_values[:3]])
             new_cryst += ''.join([f'{v:7.2f}' for v in const_values[3:6]])
@@ -298,16 +290,27 @@ def replace_cell(fn, const_values):
 def cell_as_string(cell_file):
     """Extract unit cell parameters of currently used file to one-line string
     """
-    cell_string = '{:20}'.format(cell_file)
-    if cell_file[-5:] == '.cell' or cell_file[-13:] == '.cell_refined':
+    if len(cell_file) < 20:
+        cell_string = f"{cell_file:20}"
+    else:
+        cell_string = f"{cell_file}\n{'':20}"
+    if cell_file[-5:] == '.cell':
         cell_info = re.findall(r'( = )([^\s]+)', open(cell_file).read())
         cell_string += '  '.join([item[1] for item in cell_info]) + '\n'
-    elif cell_file[-4:] == '.pdb' or cell_file[-12:] == '.pdb_refined':
+    elif cell_file[-4:] == '.pdb':
         cell_info = open(cell_file).read().splitlines()[0].split()[1:]
         cell_string += '  '.join(cell_info[6:]) + '  ' + '  '.join(cell_info[:6])
     else:
         warnings.warn(' Cell file is of unknown type (by extension)!')
     return cell_string
+
+
+def get_refined_cell_name(cell_file):
+        """Generate a name for the rifened cell parameters file from the
+        original cell_file."""
+        orig_file = os.path.split(cell_file)[1]
+        f_name, f_ext = orig_file.rsplit('.', 1)
+        return f"{f_name}_refined.{f_ext}"
 
 
 def scan_cheetah_proc_dir(path):
@@ -524,6 +527,216 @@ def set_dotdict_val(dictionary: dict, parameter: str, value: Any) -> None:
     """
     if '.' in parameter:
         key, new_parameter = parameter.split('.', 1)
+        if key not in dictionary:
+            dictionary[key] = {}
         set_dotdict_val(dictionary[key], new_parameter, value)
     else:
         dictionary[parameter] = value
+
+
+def into_list(value: Any) -> list:
+    """If an input is not a list - embed it into one. Otherwise return
+    the original list."""
+    if isinstance(value, list):
+        return value
+    else:
+        return [value]
+
+
+def string_to_list(value: str) -> list:
+    """Convert input string representing a list or just comma-separated
+    values to the list of strings."""
+    result = [val.strip('"\' ') for val in value.strip('][ ').split(',')]
+    return result
+
+
+def string_to_type(value: str, val_type: Type) -> Any:
+    """Convert input string to val_type with special treatment of
+    boolean values"""
+    if val_type == bool:
+        if value == "True" or value == "true":
+            return True
+        elif value == "False" or value == "false":
+            return False
+        else:
+            raise ValueError(
+                "Only 'True' or 'False' can be converted to boolean.")
+    else:
+        return val_type(value)
+
+
+def list_to_re(str_list: Collection) -> str:
+    """Convert input representing collection of strings into a regular
+    expression matching any of the input strings."""
+    re_list = [f'^{val}$' for val in str_list]
+    return r'|'.join(re_list)
+
+
+def user_input_str(
+    message: str, default: Any, re_format: str=None
+    ) -> Tuple[bool, str]:
+    """Request user's input as a string and match it to the provided
+    regular expression.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it does not match the regular expression.
+    re_format : str, optional
+        Regular expresion to be matched, by default None.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        bool
+            Whether an input from the user have been accepted.
+        str
+            An input from the user in case it satisfies the regular
+            expresion, otherwise the default value.
+    """
+    usr_inp = input(f'{message} [{default}] > ').strip()
+    if usr_inp != '':
+        if re_format is None or re.match(re_format, usr_inp):
+            return True, usr_inp
+        else:
+            warnings.warn(
+                f"Does not satisfy expected format: r'{re_format}'; "
+                "kept at default."
+            )
+            return False, default
+    else:
+        return False, default
+
+
+def user_input_type(
+    message: str, default: Any, val_type: Type
+    ) -> Tuple[bool, Any]:
+    """Request user's input and convert it to the specified type.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it cannot be converted to the specified type.
+    val_type : Type
+        Type of the expected user's input.
+
+    Returns
+    -------
+    Tuple[bool, Any]
+        bool
+            Whether an input from the user have been accepted.
+        Any
+            An input from the user in case it can be converted to the
+            specified type, otherwise the default value.
+    """
+    re_format = None
+    if val_type == bool:
+        re_format = r'^[Tt]rue$|^[Ff]alse$'
+    accepted, usr_inp = user_input_str(message, default, re_format)
+    if accepted:
+        try:
+            return True, string_to_type(usr_inp, val_type)
+        except ValueError:
+            warnings.warn('Wrong type; kept at default.')
+            return False, default
+    else:
+        return False, default
+
+
+def user_input_list(
+    message: str, default: Any, val_type: Type, n_elements: int=-1,
+    broadcastable: bool=False
+    ) -> Tuple[bool, list]:
+    """Request user's input as a single value or a list of values and
+    convert it to the list of values with the specified type.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case user does not provide the input
+        or it cannot be converted to the specified type.
+    val_type : Type
+        Type of the expected user's input.
+    n_elements : int, optional
+        Expected number of the list elements, by default -1 which means
+        any number. Lists with 1 element are accepted in case
+        broadcastable is True.
+    broadcastable : bool, optional
+        Whether a value can be broadcast, by default False.
+
+    Returns
+    -------
+    bool, list
+        bool
+            Whether an input from the user have been accepted.
+        list
+            An input from the user as a list of values of specified
+            type, or the default value in case user's input cannot be
+            converted.
+    """
+    accepted, usr_inp = user_input_str(message, default)
+    if accepted:
+        usr_inp = string_to_list(usr_inp)
+        n_inp = len(usr_inp)
+        if ((n_elements > 0) and (n_inp != n_elements)
+            and (not broadcastable or n_inp != 1)):
+            warnings.warn(
+                f'Expected a list with {n_elements} elements; '
+                f'kept at default.'
+            )
+            return False, default
+        try:
+            return True, [string_to_type(val, val_type) for val in usr_inp]
+        except ValueError:
+            warnings.warn('Wrong type; kept at default.')
+            return False, default
+    else:
+        return False, default
+
+
+def user_input_path(
+    message: str, default: str=None
+    ) -> Tuple[bool, str]:
+    """Request user to provide existing path.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : str, optional
+        Default path to a file or folder, by default None, which will
+        keep requesting user's input until an existing path will be
+        provided.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        bool
+            Whether an input from the user have been accepted.
+        str
+            An input from the user in case specified path exists,
+            otherwise the default value.
+    """
+    while True:
+        accepted, usr_inp = user_input_str(message, default)
+        if accepted:
+            if os.path.exists(usr_inp):
+                return True, usr_inp
+            elif default is not None:
+                warnings.warn('Path does not exist; kept at default.')
+                return False, default
+            else:
+                print(
+                    "Path does not exist - please provide an existing path.")
+        elif default is not None:
+            return False, default
+        else:
+            print("Please provide an existing path.")
