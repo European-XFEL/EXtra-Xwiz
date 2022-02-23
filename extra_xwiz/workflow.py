@@ -46,9 +46,9 @@ class Workflow:
                 "Configuration option 'data.path' is deprecated, please "
                 "specify proposal number as 'data.proposal' instead."
             )
-            mobj = re.search(r'/p(\d{6})', conf['data']['path'])
-            if mobj is not None:
-                self.data_proposal = int(mobj.group(1))
+            re_match = re.search(r'/p(\d{6})', conf['data']['path'])
+            if re_match is not None:
+                self.data_proposal = int(re_match.group(1))
             else:
                 raise ValueError(
                     "Could not retrieve proposal number from data path.")
