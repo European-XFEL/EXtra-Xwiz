@@ -60,8 +60,13 @@ class ParameterScanner:
         self.xwiz_dir = osp.abspath(osp.dirname(xwiz_conf_sel))
 
         self.scan_items = list()
-        parameters = sorted(self.scan_conf['scan'].keys(), key=str.lower)
-        for param in parameters:
+        for param in self.scan_conf['scan']:
+            # Scan names cannot conflict with FOMS:
+            fom_keys = [key.lower() for key in sout.FOMS]
+            if param.lower() in fom_keys:
+                raise ValueError(
+                    f"Cannot use '{param}' as a scan name.\n"
+                    f"Please don't use any of the fom names: {fom_keys}.")
             param_rand_values = sutl.get_scan_val(
                 next(iter(self.scan_conf['scan'][param].values())))
             n_iter = len(param_rand_values)
