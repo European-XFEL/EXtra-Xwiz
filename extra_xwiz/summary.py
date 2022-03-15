@@ -1,6 +1,34 @@
 from datetime import datetime
 import os
 import re
+from typing import TextIO, Any
+
+
+def config_to_summary(
+    sum_file: TextIO, conf: Any, param_key: str=None, indent: int=0
+    ):
+    """Write config dictionary to the summary file.
+
+    Parameters
+    ----------
+    sum_file : TextIO
+        Summary file to write to.
+    conf : Any
+        Config dictionary or parameter.
+    param_key : str, optional
+        Key to the current config dictionary or parameter.
+    indent : int, optional
+        Desired indentation for the config block, by default 0
+    """
+    indent_step = 3
+    if isinstance(conf, dict):
+        if param_key is not None:
+            sum_file.write(f"{'':^{indent}}Group: {param_key}\n")
+            indent += indent_step
+        for key in conf:
+            config_to_summary(sum_file, conf[key], key, indent)
+    else:
+        sum_file.write(f"{'':^{indent}}{param_key:15}: {conf}\n")
 
 
 def create_new_summary(prefix, conf, is_interactive, use_cheetah):
@@ -12,32 +40,35 @@ def create_new_summary(prefix, conf, is_interactive, use_cheetah):
             'interactive (run-time parameter confirm/override)'][is_interactive]
     input_type = ['virtual data set referring to EuXFEL-corrected HDF5',
                   'HDF5 pre-processed with Cheetah'][use_cheetah]
-    with open(f'{prefix}.summary', 'w') as f:
-        f.write('SUMMARY OF XWIZ WORKFLOW\n\n')
-        f.write(f'Session time-stamp: {time_stamp}\n')
-        f.write(f'Operation mode:\n  {mode}\n')
-        f.write(f'Input type:\n  {input_type}\n')
-        f.write('\nBASE CONFIGURATION USED\n')
-        for group_key, group_dict in conf.items():
-            f.write(f' Group: {group_key}\n')
-            for param_key, param_value in group_dict.items():
-                f.write(f'   {param_key:12}: {param_value}\n')
+    with open(f'{prefix}.summary', 'w') as sum_file:
+        sum_file.write('SUMMARY OF XWIZ WORKFLOW\n\n')
+        sum_file.write(f'Session time-stamp: {time_stamp}\n')
+        sum_file.write(f'Operation mode:\n  {mode}\n')
+        sum_file.write(f'Input type:\n  {input_type}\n')
+        sum_file.write('\nBASE CONFIGURATION USED\n')
+        config_to_summary(sum_file, conf, indent=1)
+        sum_file.write('\n')
 
 
-def report_step_rate(prefix, stream_file, step, res_limit):
+def report_step_rate(prefix, stream_file, step, res_limit, n_frames):
     """Parse assembled indexamajig stream file for frames and crystals.
        Calculate indexing rate and report to summary file.
     """
     if not os.path.exists(stream_file):
         return
-    frame_occur = re.findall('Event: //', open(stream_file).read(), re.DOTALL)
-    cryst_occur = re.findall('Cell parameters', open(stream_file).read(),
-                             re.DOTALL)
-    indexing_rate = 100.0 * len(cryst_occur) / len(frame_occur)
+    n_cryst = len(
+        re.findall('Cell parameters', open(stream_file).read(), re.DOTALL)
+    )
+    indexing_rate = 100.0 * n_cryst / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('Step #   d_lim   source      N(crystals)    N(frames)    Indexing rate [%%]\n')
-        f.write(' {:2d}        {:3.1f}   indexamajig   {:7d}     {:7d}         {:5.2f}\n'.format(step,
-                res_limit, len(cryst_occur), len(frame_occur), indexing_rate))
+        f.write(
+            "Step #   d_lim   source      N(crystals)    N(frames)    "
+            "Indexing rate [%%]\n"
+        )
+        f.write(
+            f" {step:2d}        {res_limit:3.1f}   indexamajig   "
+            f"{n_cryst:7d}     {n_frames:7d}         {indexing_rate:5.2f}\n"
+        )
 
 
 def report_cell_check(prefix, n_crystals, n_frames):
@@ -46,20 +77,26 @@ def report_cell_check(prefix, n_crystals, n_frames):
     """
     indexing_rate = 100.0 * n_crystals / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('                 cell_check    {:7d}     {:7d}         {:5.2f}\n'.format(n_crystals,
-                n_frames, indexing_rate))
+        f.write(
+            f"                 cell_check    {n_crystals:7d}     "
+            f"{n_frames:7d}         {indexing_rate:5.2f}\n"
+        )
 
 
-def report_total_rate(prefix, n_total):
+def report_total_rate(prefix, n_frames):
     """Report overall hit rate as ratio between crystals in last stream file
        and total number of frames, as per initial setting.
     """
-    cryst_occur = re.findall('Cell parameters',
-                             open(f'{prefix}_hits.stream').read(), re.DOTALL)
-    indexing_rate = 100.0 * len(cryst_occur) / n_total
+    stream_file = f'{prefix}_hits.stream'
+    n_cryst = len(
+        re.findall('Cell parameters', open(stream_file).read(), re.DOTALL)
+    )
+    indexing_rate = 100.0 * n_cryst / n_frames
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('                 OVERALL       {:7d}     {:7d}         {:5.2f}\n'.format(len(cryst_occur),
-                n_total, indexing_rate))
+        f.write(
+            f"                 OVERALL       {n_cryst:7d}     "
+            f"{n_frames:7d}         {indexing_rate:5.2f}\n"
+        )
 
 
 def report_cells(prefix, cell_strings):
@@ -120,11 +157,10 @@ def report_reprocess(prefix):
 
 
 def report_reconfig(prefix, overrides):
-    """List all instances where the config-file parameters were overridden
-    """
+    """List all instances where the config-file parameters were
+    overridden."""
     if len(overrides) == 0:
         return
-    with open(f'{prefix}.summary', 'a') as f:
-        f.write('\nINTERACTIVE PARAMETER OVERRIDES\n')
-        for param_key, param_value in overrides.items():
-            f.write(f'   {param_key:18}: {param_value}\n')
+    with open(f'{prefix}.summary', 'a') as sum_file:
+        sum_file.write('\nPARAMETERS SET IN THE INTERACTIVE MODE\n')
+        config_to_summary(sum_file, overrides, indent=1)

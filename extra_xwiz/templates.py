@@ -7,12 +7,10 @@ POINT_GROUPS = ['1', '2', '222', '4', '422', '3', '321', '312', '6', '622',
 
 CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
-runs = "30"
-n_frames_percent = 100
+proposal = 700000
+runs = [30]
 n_frames_total = 100000
-vds_names = "xmpl_30_vds.cxi"
-vds_mask_bad = "0xffff"
+vds_names = ["xmpl_30_vds.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
@@ -21,11 +19,10 @@ version = 'cfel_dev'
 
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
-template_path = "./agipd_mar18_v11.geom"
 
 [slurm]
-# Available partitions: 'upex', 'exfel'
-partition = "upex"
+# Available partitions: 'all', 'upex', 'exfel'
+partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
@@ -40,14 +37,14 @@ peak_min_px = 1
 peak_max_px = 2
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
-n_cores = 40
+n_cores = -1
 local_bg_radius = 3
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
 
 [unit_cell]
-file = "hewl.cell"
+file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
 
 [frame_filter]
@@ -66,15 +63,14 @@ max_adu = 100000
 
 ADV_CONFIG = """\
 [data]
-path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/"
-runs = "30"
+proposal = 700000
+runs = [30]
 n_frames_offset = 0
 n_frames_max = -1
 n_frames_percent = 100
 n_frames_total = 100000
-vds_names = "xmpl_30_vds.cxi"
-vds_mask_bad = "0xffff"
-cxi_names = "p2304_r0108.cxi"
+vds_names = ["xmpl_30_vds.cxi"]
+cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
@@ -83,7 +79,6 @@ version = 'cfel_dev'
 
 [geom]
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
-template_path = "./agipd_mar18_v11.geom"
 
   [geom.add_hd5mask]
   run = false
@@ -94,8 +89,8 @@ template_path = "./agipd_mar18_v11.geom"
   output = "geometry/jungfrau_p2696_v2_vds.geom"
 
 [slurm]
-# Available partitions: 'upex', 'exfel'
-partition = "upex"
+# Available partitions: 'all', 'upex', 'exfel'
+partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
 duration_hits = "0:30:00"
@@ -110,14 +105,14 @@ peak_min_px = 1
 peak_max_px = 2
 peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
-n_cores = 40
+n_cores = -1
 local_bg_radius = 3
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
 
 [unit_cell]
-file = "hewl.cell"
+file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
 
 [frame_filter]
@@ -165,12 +160,20 @@ echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 echo ""
 indexamajig --version
 echo ""
+N_CORES_USE=%(CORES)s
+N_CORES_AVAL="$(nproc)"
+if [[ $N_CORES_USE -lt 0 ]]
+then
+  N_CORES_USE=$N_CORES_AVAL
+fi
+echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
   -g %(GEOM)s %(CRYSTAL)s \\
-  -j %(CORES)s \\
+  -j $N_CORES_USE \\
   --highres=%(RESOLUTION)s \\
   --peaks=%(PEAK_METHOD)s \\
   --min-snr=%(PEAK_SNR)s \\
@@ -204,12 +207,20 @@ echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 echo ""
 indexamajig --version
 echo ""
+N_CORES_USE=%(CORES)s
+N_CORES_AVAL="$(nproc)"
+if [[ $N_CORES_USE -lt 0 ]]
+then
+  N_CORES_USE=$N_CORES_AVAL
+fi
+echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
+echo ""
 
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
   -g %(GEOM)s %(CRYSTAL)s \\
-  -j %(CORES)s \\
+  -j $N_CORES_USE \\
   --highres=%(RESOLUTION)s \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\

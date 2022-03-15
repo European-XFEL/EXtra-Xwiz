@@ -38,6 +38,29 @@ def check_geom_format(geometry, use_peaks):
     return True
 
 
+def get_detector_type(fn):
+    """ Read the pixel size to tell AGIPD-1M from JUNGFRAU-4M.
+        Send a critical error if the found value does not comply to either
+    """
+    pixel_res = ''
+    with open(fn) as f:
+        for ln in f:
+            if ln[:5] == 'res =':
+                pixel_res = ln.split()[2]
+                break
+        if pixel_res == '5000' or pixel_res == '5000.0':
+            return 'agipd'
+        elif pixel_res == '13333.3':
+            return 'jungfrau'
+        else:
+            print(
+                'Fatal error: could not verify detector type.\n'
+                'In the geometry file expected:\n'
+                '    "res = 5000" for agipd\n'
+                '    "res = 13333.3" for jungfrau\n'
+                'Termination due to unresolved geometry format'
+            )
+            exit(0)
 
 def get_detector_distance(fn):
     """ Read the sample-to-detector distance (aka "camera length")
@@ -63,12 +86,28 @@ def get_photon_energy(fn):
 def get_bad_pixel(fn):
     """ Read the integer bit-value for bad pixels (mask)
     """
+    default_val = '0xffff'
     with open(fn) as f:
         for ln in f:
-            if ln[:10] == 'mask_bad =':
-                return ln.split()[-1]
-        print(' Warning: "mask_bad" keyword not found')
-        return '0xffff'
+            # Get rid of comments
+            ln = ln.partition(';')[0]
+            if 'mask_bad' in ln:
+                mask_bad_val = ln.partition('=')[2].strip()
+                # Check if the value can be converted from hex to int
+                try:
+                    _ = int(mask_bad_val, 16)
+                except ValueError:
+                    warnings.warn(
+                        f'\n Illegal "mask_bad" in the geometry: {mask_bad_val}.'
+                        f'\n Using the default of {default_val}.'
+                    )
+                    mask_bad_val = default_val
+                return mask_bad_val
+        warnings.warn(
+            f'\n No "mask_bad" keyword in the geometry file.'
+            f'\n Using the default of {default_val}.'
+        )
+        return default_val
 
 
 def get_panel_positions(fn):
