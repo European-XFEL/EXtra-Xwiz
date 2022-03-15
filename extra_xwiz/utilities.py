@@ -81,29 +81,6 @@ def print_progress_bar(
     print(f" [{bar}] {progress} {extra_str}", end='\r')
 
 
-def print_progress_bar(
-    n_current, n_total, length=50, fill='#',
-    extra_string=lambda s1, s2: '', **kwargs
-):
-    state_str = "—\/"
-    state = getattr(print_progress_bar, 'state', -1)
-    state = state + 1 if state < (len(state_str) - 1) else 0
-    state_ch = state_str[state]
-    print_progress_bar.state = state
-
-    frac = n_current / n_total
-    progress = f"{100 * frac:.1f}%"
-    filled_len = int(length * frac)
-    if filled_len < length:
-        bar = fill * filled_len + state_ch + '—' * (length - filled_len - 1)
-    else:
-        bar = fill * filled_len
-
-    extra_str = extra_string(n_current, n_total, **kwargs)
-    print("\x1b[2K", end='\r')
-    print(f" [{bar}] {progress} {extra_str}", end='\r')
-
-
 def print_simple_bar(n_current, n_total, length=80, fill='#'):
     """ Visualize a percent fraction by a bar, update in-line using <CR> char.
     """

@@ -18,8 +18,6 @@ from . import utilities as utl
 from . import templates as tmp
 from . import summary as smr
 
-WARN_WRONG_TYPE = 'Wrong type; kept at default.'
-
 
 class Workflow:
 
@@ -118,6 +116,7 @@ class Workflow:
             self.n_frames_total = conf['data']['n_frames']
         else:
             self.n_frames_total = -1
+
         self.list_prefix = conf['data']['list_prefix']
 
         self._crystfel_version = conf['crystfel']['version']
