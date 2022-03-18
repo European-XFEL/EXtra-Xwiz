@@ -14,7 +14,7 @@ vds_names = ["xmpl_30_vds.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
-# Available versions: '0.8.0', '0.9.1', '0.10.0', 'cfel_dev'
+# Available versions: '0.8.0', '0.9.1', '0.10.1','cfel_dev'
 version = 'cfel_dev'
 
 [geom]
@@ -74,7 +74,7 @@ cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
-# Available versions: '0.8.0', '0.9.1', '0.10.0', 'cfel_dev'
+# Available versions: '0.8.0', '0.9.1', '0.10.1', 'cfel_dev'
 version = 'cfel_dev'
 
 [geom]
