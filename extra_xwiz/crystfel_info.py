@@ -36,10 +36,19 @@ crystfel_info = {
             CRYSTALS_PATTERN_8,
     },
 
+    '0.10.1': {
+        'import':
+            'module load maxwell crystfel/0.10.1',
+        'log_frames_pattern':
+            FRAMES_PATTERN_9,
+        'log_crystals_pattern':
+            CRYSTALS_PATTERN_8,
+    },
+
     'cfel_dev': {
         'import':
             'export PATH='
-            '/gpfs/cfel/cxi/common/public/development/crystfel/bin:$PATH',
+            '/gpfs/cfel/group/cxi/common/public/development/crystfel/bin:$PATH',
         'log_frames_pattern':
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
