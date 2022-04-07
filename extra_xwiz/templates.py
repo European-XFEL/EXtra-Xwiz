@@ -122,6 +122,20 @@ match_tolerance = 0.1
 resolution = 2.0
 integration_radii = "2,3,5"
 
+[partialator_split]
+execute = false
+# Available modes: "on_off", "on_off_numbered", "by_pulse_id"
+mode = "on_off"
+# Required only for "on_off" or "on_off_numbered" modes:
+xray_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_0.output", "data.rawData"]
+laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
+plot_train = 0
+# Required only for "by_pulse_id" mode:
+[partialator_split.pulse_datasets]
+  my_1 = [0,4]
+  my_2 = [12, 20]
+  my_3 = [24, 48]
+
 [merging]
 point_group = "422"
 scaling_model = "unity"
@@ -242,7 +256,8 @@ partialator \\
     -y %(POINT_GROUP)s \\
     --max-adu=%(MAX_ADU)s \\
     --iterations=%(N_ITER)s \\
-    --model=%(MODEL)s
+    --model=%(MODEL)s \\
+    %(PARTIALATOR_SPLIT)s
 """
 
 CHECK_HKL_WRAP = """\

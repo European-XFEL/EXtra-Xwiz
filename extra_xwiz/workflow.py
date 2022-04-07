@@ -14,8 +14,9 @@ import findxfel as fdx
 from . import config
 from . import crystfel_info as cri
 from . import geometry as geo
-from . import utilities as utl
+from . import partialator_split as pspl
 from . import templates as tmp
+from . import utilities as utl
 from . import summary as smr
 
 
@@ -77,7 +78,7 @@ class Workflow:
             self.vds_names = utl.string_to_list(conf['data']['vds_names'])
         else:
             self.vds_names = utl.into_list(conf['data']['vds_names'])
-        if not len(self.vds_names) == len(self.data_runs_paths):
+        if len(self.vds_names) != len(self.data_runs_paths):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         if 'cxi_names' in conf['data']:
@@ -159,6 +160,15 @@ class Workflow:
         self.cell_run_refine = conf['unit_cell']['run_refine']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
         self.integration_radii = conf['proc_fine']['integration_radii']
+
+        if ('partialator_split' in conf
+            and conf['partialator_split']['execute']
+            ):
+            self.run_partialator_split = True
+            self.partialator_split_config = conf['partialator_split']
+        else:
+            self.run_partialator_split = False
+
         self.point_group = conf['merging']['point_group']
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
@@ -947,10 +957,30 @@ class Workflow:
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
         """
-
-        # Prepare a directory to store partialator input and output
+        # Prepare a folder to store partialator input and output
         part_dir = f"./partialator"
         utl.make_new_dir(part_dir)
+
+        # Prepare partialator list file(s) for splitting frames into datasets
+        if self.run_partialator_split:
+            print("Preparing list files to split frames into datasets.\n")
+            frame_datasets = []
+            ds_names = self.cxi_names if self.use_peaks else self.vds_names
+            for ds_run, ds_name in zip(self.data_runs, ds_names):
+                utl.make_link(ds_name, part_dir)
+                splitter = pspl.DatasetSplitter(
+                    self.data_proposal, ds_run, ds_name,
+                    self.partialator_split_config
+                )
+                frame_datasets.extend(splitter.get_split_list())
+            with open(f"{part_dir}/partialator_datasets.plst", 'w') as f_out:
+                f_out.write("\n".join(frame_datasets))
+            part_split_arg = "--custom-split partialator_datasets.plst"
+        else:
+            part_split_arg = ""
+
+        if self.interactive:
+            self.verify_merging_config()
         # Make links to the refined cell and output stream files
         utl.make_link(self.cell_file, part_dir)
         utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
@@ -965,7 +995,8 @@ class Workflow:
                 'POINT_GROUP': self.point_group,
                 'N_ITER': self.scale_iter,
                 'MODEL': self.scale_model,
-                'MAX_ADU': self.max_adu
+                'MAX_ADU': self.max_adu,
+                'PARTIALATOR_SPLIT': part_split_arg
             })
         subprocess.check_output(['sh', '_tmp_partialator.sh'],
             cwd=part_dir, stderr=subprocess.STDOUT)
@@ -1024,9 +1055,6 @@ class Workflow:
         smr.report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
-        if self.interactive:
-            self.verify_merging_config()
-
         self.merge_bragg_obs()
 
         # report all config parameters modified in the interactive mode
