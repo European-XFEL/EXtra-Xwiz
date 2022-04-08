@@ -969,7 +969,7 @@ class Workflow:
             for ds_run, ds_name in zip(self.data_runs, ds_names):
                 utl.make_link(ds_name, part_dir)
                 splitter = pspl.DatasetSplitter(
-                    self.data_proposal, ds_run, ds_name,
+                    self.data_proposal, ds_run, ds_name, part_dir,
                     self.partialator_split_config
                 )
                 frame_datasets.extend(splitter.get_split_list())
