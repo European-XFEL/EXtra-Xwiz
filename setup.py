@@ -50,7 +50,6 @@ setup(
     },
     install_requires=[
         'h5py',
-        'json',
         'matplotlib',
         'numpy',
         'pandas',
