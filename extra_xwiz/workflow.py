@@ -8,12 +8,14 @@ import re
 import shutil
 import subprocess
 import warnings
+import xarray as xr
 
 import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
 from . import geometry as geo
+from . import json_log as jlog
 from . import partialator_split as pspl
 from . import templates as tmp
 from . import utilities as utl
@@ -954,6 +956,91 @@ class Workflow:
             utl.replace_cell(self.cell_file, refined_cell)
             self.cell_file = utl.get_refined_cell_name(self.cell_file)
 
+    def get_partialator_foms(
+        self, datasets: list, folder: str
+    ) -> xr.DataArray:
+        n_datasets = len(datasets)
+        part_foms_arr = np.zeros((n_datasets, 2, 5))
+        foms = ["Completeness", "Signal-over-noise", "CC_1/2", "CC*",
+                "R_split"]
+        foms_tag = ['completeness', 'completeness', 'CC', 'CCstar', 'Rsplit']
+        foms_log = ['', '<snr>', 'CC', 'CC*', 'Rsplit']
+        col_foms = [3, 6, 1, 1, 1]
+        col_nref = [1, 1, 2, 2, 2]
+
+        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+
+        for i_ds, dataset in enumerate(datasets):
+            if dataset == pspl.ALL_DATASET:
+                ds_suffix = ""
+            else:
+                ds_suffix = f"-{dataset}"
+
+            log_items = []
+            # create simple resolution-bin table
+            with open(f'{folder}/_tmp_table_gen.sh', 'w') as f:
+                f.write(tmp.CHECK_HKL_WRAP % {
+                    'IMPORT_CRYSTFEL': crystfel_import,
+                    'PREFIX': self.list_prefix,
+                    'DS_SUFFIX': ds_suffix,
+                    'POINT_GROUP': self.point_group,
+                    'UNIT_CELL': self.cell_file,
+                    'HIGH_RES': self.res_higher
+                })
+            out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
+                cwd=folder, stderr=subprocess.STDOUT)
+            log_items.extend(out.decode('utf-8').split())
+
+            # create resolution-bin tables based on half-sets
+            for i in range(2,5):
+                with open(f'{folder}/_tmp_table_gen{i}.sh', 'w') as f:
+                    f.write(tmp.COMPARE_HKL_WRAP % {
+                        'IMPORT_CRYSTFEL': crystfel_import,
+                        'PREFIX': self.list_prefix,
+                        'DS_SUFFIX': ds_suffix,
+                        'POINT_GROUP': self.point_group,
+                        'UNIT_CELL': self.cell_file,
+                        'HIGH_RES': self.res_higher,
+                        'FOM': foms_tag[i]
+                    })
+                out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
+                    cwd=folder, stderr=subprocess.STDOUT)
+                log_items.extend(out.decode('utf-8').split())
+
+            for fn in glob(f'{folder}/_tmp*'):
+                os.remove(fn)
+
+            for i_fom in range(5):
+                table = f"{self.list_prefix}_{foms_tag[i_fom]}{ds_suffix}.dat"
+                with open(f"{folder}/{table}", 'r') as f_table:
+                    table_lines = f_table.readlines()[1:]
+
+                c_fom = col_foms[i_fom]
+                c_ref = col_nref[i_fom]
+
+                if i_fom == 0:
+                    fom_all = utl.table_weighted_average(
+                        table_lines, c_fom, c_ref
+                    )
+                else:
+                    fom_all = float(
+                        log_items[log_items.index(foms_log[i_fom]) + 2]
+                    )
+                fom_outer = float(table_lines[-1].split()[c_fom])
+
+                part_foms_arr[i_ds, 0, i_fom] = fom_all
+                part_foms_arr[i_ds, 1, i_fom] = fom_outer
+
+        part_foms = xr.DataArray(
+            part_foms_arr,
+            coords={
+                "dataset": datasets,
+                "shell": ["overall", "outer shell"],
+                "fom": foms
+            }
+        )
+        return part_foms
+
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
         """
@@ -965,6 +1052,7 @@ class Workflow:
         if self.run_partialator_split:
             print("Preparing list files to split frames into datasets.\n")
             frame_datasets = []
+            splitter_datasets = set()
             ds_names = self.cxi_names if self.use_peaks else self.vds_names
             for ds_run, ds_name in zip(self.data_runs, ds_names):
                 utl.make_link(ds_name, part_dir)
@@ -973,11 +1061,14 @@ class Workflow:
                     self.partialator_split_config
                 )
                 frame_datasets.extend(splitter.get_split_list())
+                splitter_datasets |= splitter.all_datasets
             with open(f"{part_dir}/partialator_datasets.plst", 'w') as f_out:
                 f_out.write("\n".join(frame_datasets))
             part_split_arg = "--custom-split partialator_datasets.plst"
+            part_datasets = [pspl.ALL_DATASET] + sorted(splitter_datasets)
         else:
             part_split_arg = ""
+            part_datasets = [pspl.ALL_DATASET]
 
         if self.interactive:
             self.verify_merging_config()
@@ -1001,39 +1092,11 @@ class Workflow:
         subprocess.check_output(['sh', '_tmp_partialator.sh'],
             cwd=part_dir, stderr=subprocess.STDOUT)
 
-        log_items = []
-        # create simple resolution-bin table
-        with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
-            f.write(tmp.CHECK_HKL_WRAP % {
-                'IMPORT_CRYSTFEL': crystfel_import,
-                'PREFIX': self.list_prefix,
-                'POINT_GROUP': self.point_group,
-                'UNIT_CELL': self.cell_file,
-                'HIGH_RES': self.res_higher
-            })
-        out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
-            cwd=part_dir, stderr=subprocess.STDOUT)
-        log_items.extend(out.decode('utf-8').split())
+        part_foms = self.get_partialator_foms(part_datasets, part_dir)
+        part_foms.to_netcdf(f"{part_dir}/datasets_foms.nc")
+        jlog.save_partialator_foms(part_foms, part_dir)
+        smr.report_merging_metrics(part_foms, self.list_prefix)
 
-        # create resolution-bin tables based on half-sets
-        for i in range(3):
-            with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
-                f.write(tmp.COMPARE_HKL_WRAP % {
-                    'IMPORT_CRYSTFEL': crystfel_import,
-                    'PREFIX': self.list_prefix,
-                    'POINT_GROUP': self.point_group,
-                    'UNIT_CELL': self.cell_file,
-                    'HIGH_RES': self.res_higher,
-                    'FOM': ['CC', 'CCstar', 'Rsplit'][i],
-                    'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
-                })
-            out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
-                cwd=part_dir, stderr=subprocess.STDOUT)
-            log_items.extend(out.decode('utf-8').split())
-
-        for fn in glob(f'{part_dir}/_tmp*'):
-            os.remove(fn)
-        smr.report_merging_metrics(part_dir, self.list_prefix, log_items)
 
     def process_late(self):
         """ Last pass of the workflow:

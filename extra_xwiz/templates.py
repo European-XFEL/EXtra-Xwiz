@@ -267,11 +267,11 @@ source /usr/share/Modules/init/sh
 %(IMPORT_CRYSTFEL)s
 
 check_hkl \\
-    %(PREFIX)s_merged.hkl \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl \\
     -y %(POINT_GROUP)s \\
     -p %(UNIT_CELL)s \\
     --highres=%(HIGH_RES)s \\
-    --shell-file=%(PREFIX)s_completeness.dat
+    --shell-file=%(PREFIX)s_completeness%(DS_SUFFIX)s.dat
 """
 
 COMPARE_HKL_WRAP = """\
@@ -281,13 +281,13 @@ source /usr/share/Modules/init/sh
 %(IMPORT_CRYSTFEL)s
 
 compare_hkl \\
-    %(PREFIX)s_merged.hkl1 \\
-    %(PREFIX)s_merged.hkl2 \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl1 \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl2 \\
     -y %(POINT_GROUP)s \\
     -p %(UNIT_CELL)s \\
     --highres=%(HIGH_RES)s \\
     --fom=%(FOM)s \\
-    --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
+    --shell-file=%(PREFIX)s_%(FOM)s%(DS_SUFFIX)s.dat
 """
 
 CELL_EXPLORER_WRAP = """\

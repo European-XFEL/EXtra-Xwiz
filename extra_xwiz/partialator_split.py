@@ -12,6 +12,9 @@ import xarray as xr
 from extra_data import open_run
 
 
+ALL_DATASET = "all_data"
+
+
 def plot_adc_signal(
     train_id: int, xray_signal: np.ndarray, laser_signal: np.ndarray,
     threshold: float, pulse_ids: np.ndarray, laser_align: int,
@@ -255,6 +258,12 @@ class DatasetSplitter:
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode == 'by_pulse_id':
             self.pulse_datasets = split_config['pulse_datasets']
+            if ALL_DATASET in self.pulse_datasets:
+                raise ValueError(
+                    f"Dataset name '{ALL_DATASET}' is reserved - please "
+                    f"use a different dataset name.")
+        
+        self.all_datasets = set()
 
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
@@ -313,19 +322,24 @@ class DatasetSplitter:
                     break
             else:
                 dataset = 'unknown'
-        
+
+        self.all_datasets.add(dataset)
         return dataset
 
-    def get_frame_line(self, frame_id: int) -> str:
+
+    def get_frame_line(self, frame_id: int, dataset: str) -> str:
         """Compile a string with VDS file name, specified frame id and
-        dataset name in the partialator list file format."""
-        dataset = self.find_dataset(frame_id)
+        provided dataset name in the partialator list file format."""
         return f"{self.vds_file} //{frame_id} {dataset}"
-    
+
     def get_split_list(self) -> list:
         """Compile a list of strings with VDS file name, frame id and
         dataset name in the partialator list file format for all data
         frames."""
-        pool = mproc.Pool()
-        frame_datasets = pool.map(self.get_frame_line, range(self.n_frames))
-        return frame_datasets
+        with mproc.Pool() as pool:
+            datasets = pool.map(self.find_dataset, range(self.n_frames))
+            self.all_datasets = set(datasets)
+            frame_datasets = pool.starmap(
+                self.get_frame_line, zip(range(self.n_frames), datasets)
+            )
+            return frame_datasets
