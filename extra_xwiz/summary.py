@@ -139,7 +139,7 @@ def report_merging_metrics(
             foms_text[2] += f"{shell:>{sh_len}}"
             for i_fom, fom in enumerate(foms):
                 fom_val = partialator_foms.loc[dataset, shell, fom].item()
-                foms_text[3+i_fom] += f"{fom_val:{sh_len}.3}"
+                foms_text[3+i_fom] += f"{fom_val:{sh_len}.4}"
 
     with open(f'{prefix}.summary', 'a') as f:
         for line in foms_text:

@@ -64,7 +64,7 @@ def plot_adc_signal(
             [0, n_samples], [threshold, threshold], color='lightcoral',
             linestyle='-.'
         )
-        
+
         ax.set_xlim(0, n_samples)
         ax.set_ylim(min_y-offset_y, max_y+offset_y)
         ax.set_title(label)
@@ -86,7 +86,7 @@ def plot_adc_signal(
         markersize=4, linestyle='None'
     )
     axes[1].set_xlabel('ADC sample #')
-    
+
     fig.savefig(
         f"{folder}/adc_signal_tid_{train_id}.png",
         dpi=300, bbox_inches="tight"
@@ -165,20 +165,20 @@ def get_laser_state_from_diode(
 
     n_pulses = pulse_ids.shape[0]
     laser_per_pulse_arr = np.zeros((len(data_run.train_ids), n_pulses))
-    
+
     data_select = data_run.select([xray_signal_src, laser_signal_src]).trains()
     for train_id, data in data_select:
         xray_signal = np.array(data[xray_signal_src[0]][xray_signal_src[1]])
         laser_signal = np.array(data[laser_signal_src[0]][laser_signal_src[1]])
-    
+
         threshold = get_adc_threshold(xray_signal)
         pulses_thr = np.array(xray_signal) > threshold
         laser_thr = np.array(laser_signal) > threshold
-    
+
         pulse_pos = np.where(np.roll(pulses_thr,1)<pulses_thr)[0]
         align_val = align_adc_signal(laser_signal, pulse_pos)
         laser_per_pulse = laser_thr[pulse_pos + align_val]
-    
+
         # Plot X-ray pulses and PP laser pattern
         if train_id == plot_tid:
             plot_adc_signal(
@@ -190,7 +190,7 @@ def get_laser_state_from_diode(
         assert n_pulses_curr == n_pulses, (
             f"Found only {n_pulses_curr} pulses for train {train_id} "
             f"while expected {n_pulses}.")
-    
+
         laser_per_pulse_arr[(train_id-first_tid)] = laser_per_pulse
         
     laser_per_train_pulse = xr.DataArray(
@@ -257,12 +257,21 @@ class DatasetSplitter:
             )
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode == 'by_pulse_id':
-            self.pulse_datasets = split_config['pulse_datasets']
-            if ALL_DATASET in self.pulse_datasets:
+            pulse_datasets = split_config['pulse_datasets']
+            if ALL_DATASET in pulse_datasets:
                 raise ValueError(
                     f"Dataset name '{ALL_DATASET}' is reserved - please "
                     f"use a different dataset name.")
-        
+
+            self.range_dataset = dict()
+            for p_dataset in pulse_datasets:
+                if isinstance(pulse_datasets[p_dataset][0], list):
+                    for p_rng in pulse_datasets[p_dataset]:
+                        self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
+                else:
+                    p_rng = pulse_datasets[p_dataset]
+                    self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
+
         self.all_datasets = set()
 
     def get_pulses_array(self) -> np.ndarray:
@@ -291,18 +300,18 @@ class DatasetSplitter:
             raise RuntimeError(
                 f"Could not retrieve pulse ids pattern from vds file "
                 f"{self.vds_file}.")
-            
+
         return pulses_array
 
     def find_dataset(self, frame_id: int) -> str:
         """Estimate dataset name for the specified data frame id."""
         train_id = self.frame_trains[frame_id]
         pulse_id = self.frame_pulses[frame_id]
-        
+
         def decode_state() -> str:
             curr_state = int(self.laser_state.loc[train_id, pulse_id])
             return ['off', 'on'][curr_state]
-        
+
         if self.mode == 'on_off':
             dataset = decode_state()
         elif self.mode == 'on_off_numbered':
@@ -315,10 +324,9 @@ class DatasetSplitter:
                 state_num = state_array.shape[0]
             dataset = f'{state_base}_{state_num}'
         elif self.mode == 'by_pulse_id':
-            for p_dataset in self.pulse_datasets:
-                cur_range = self.pulse_datasets[p_dataset]
+            for cur_range in self.range_dataset:
                 if pulse_id >= cur_range[0] and pulse_id <= cur_range[1]:
-                    dataset = p_dataset
+                    dataset = self.range_dataset[cur_range]
                     break
             else:
                 dataset = 'unknown'
