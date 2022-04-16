@@ -4,6 +4,19 @@ import math
 import xarray as xr
 
 
+def save_slurm_info(
+    job_id: int, n_nodes: int, job_duration: str, folder: str
+) -> None:
+    """Store SLURM job information as a json file in the job folder."""
+    job_dict = {
+        'job_id': job_id,
+        'n_nodes': n_nodes,
+        'job_duration': job_duration
+    }
+    with open(f"{folder}/slurm_info.json", 'w') as j_out:
+        json.dump(job_dict, j_out)
+
+
 def save_partialator_foms(
     partialator_foms: xr.DataArray, folder: str
 ) -> None:

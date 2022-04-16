@@ -324,6 +324,7 @@ class Workflow:
             job_dir, res_limit, cell_keyword, n_nodes, job_duration,
             filtered=filtered
         )
+        jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
         n_proc_frames = utl.wait_or_cancel(
             job_id,
             job_dir,
