@@ -1,5 +1,6 @@
 """Functions to store pipeline operation log into json files."""
 import json
+import math
 import xarray as xr
 
 
@@ -13,8 +14,9 @@ def save_partialator_foms(
         for shell in partialator_foms.coords['shell'].values:
             foms_dict[dataset][shell] = {}
             for fom in partialator_foms.coords['fom'].values:
-                foms_dict[dataset][shell][fom] = partialator_foms.loc[
-                    dataset, shell, fom
-                ].item()
+                fom_value = partialator_foms.loc[dataset, shell, fom].item()
+                if math.isnan(fom_value):
+                    fom_value = None
+                foms_dict[dataset][shell][fom] = fom_value
     with open(f"{folder}/datasets_foms.json", 'w') as j_out:
         json.dump(foms_dict, j_out)
