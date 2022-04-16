@@ -697,6 +697,16 @@ class Workflow:
                 self.local_bg_radius
             )
 
+        accepted, self.integration_radii = utl.user_input_str(
+            "Integration radii around predicted Bragg-peak positions",
+            self.integration_radii, re_format = r'\d,\d,\d'
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.integration_radii",
+                self.integration_radii
+            )
+
         accepted, self.max_res = utl.user_input_type(
             "Maximum radius from the detector center to accepted peaks",
             self.max_res, val_type = int
@@ -742,16 +752,6 @@ class Workflow:
         if accepted:
             utl.set_dotdict_val(
                 self.overrides, "proc_fine.resolution", self.res_higher)
-
-        accepted, self.integration_radii = utl.user_input_str(
-            "Integration radii around predicted Bragg-peak positions",
-            self.integration_radii, re_format = r'\d,\d,\d'
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "proc_fine.integration_radii",
-                self.integration_radii
-            )
 
     def verify_run_proc_fine(self):
         """Verify whether to perform second run of indexamajig."""
