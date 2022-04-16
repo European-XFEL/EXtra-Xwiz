@@ -285,6 +285,7 @@ def replace_cell(fn, const_values):
             f_out.write(new_cryst)
     else:
         warnings.warn(' Cell file is of unknown type (by extension)!')
+    return fn_refined
 
 
 def cell_as_string(cell_file):

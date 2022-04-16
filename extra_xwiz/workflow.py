@@ -953,8 +953,7 @@ class Workflow:
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----\n')
             refined_cell = utl.fit_unit_cell(self.cell_ensemble)
-            utl.replace_cell(self.cell_file, refined_cell)
-            self.cell_file = utl.get_refined_cell_name(self.cell_file)
+            self.cell_file = utl.replace_cell(self.cell_file, refined_cell)
 
     def get_partialator_foms(
         self, datasets: list, folder: str
