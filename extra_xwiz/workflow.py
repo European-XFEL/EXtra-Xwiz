@@ -139,12 +139,9 @@ class Workflow:
             )
 
         self.n_nodes_all = conf['slurm']['n_nodes_all']
-        self.n_nodes_hits = conf['slurm']['n_nodes_hits']
         self.partition = conf['slurm']['partition']
         self.duration_all = conf['slurm']['duration_all']
-        self.duration_hits = conf['slurm']['duration_hits']
         self.res_lower = conf['proc_coarse']['resolution']
-        self.res_higher = conf['proc_fine']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
@@ -153,6 +150,11 @@ class Workflow:
         self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
         self.local_bg_radius = conf['proc_coarse']['local_bg_radius']
+        if 'integration_radii' in conf['proc_coarse']:
+            self.integration_radii = conf['proc_coarse']['integration_radii']
+        else:
+            self.integration_radii = conf['proc_fine']['integration_radii']
+            warnings.warn("Please move 'integration_radii' to 'proc_coarse'.")
         self.max_res = conf['proc_coarse']['max_res']
         self.min_peaks = conf['proc_coarse']['min_peaks']
         self.indexamajig_n_cores = conf['proc_coarse']['n_cores']
@@ -160,8 +162,22 @@ class Workflow:
 
         self.cell_file = conf['unit_cell']['file']
         self.cell_run_refine = conf['unit_cell']['run_refine']
-        self.cell_tolerance = conf['frame_filter']['match_tolerance']
-        self.integration_radii = conf['proc_fine']['integration_radii']
+
+        if ('proc_fine' not in conf
+            or ('execute' in conf['proc_fine']
+                and not conf['proc_fine']['execute'])):
+            self.run_proc_fine = False
+            self.res_higher = self.res_lower
+            self.n_nodes_hits = conf['slurm'].get('n_nodes_hits')
+            self.duration_hits = conf['slurm'].get('duration_hits')
+            self.cell_tolerance = conf.get(
+                'frame_filter', {}).get('match_tolerance')
+        else:
+            self.run_proc_fine = True
+            self.n_nodes_hits = conf['slurm']['n_nodes_hits']
+            self.duration_hits = conf['slurm']['duration_hits']
+            self.cell_tolerance = conf['frame_filter']['match_tolerance']
+            self.res_higher = conf['proc_fine']['resolution']
 
         if ('partialator_split' in conf
             and conf['partialator_split']['execute']
@@ -558,14 +574,6 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.partition", self.partition)
 
-        accepted, self.duration_all = utl.user_input_str(
-            "SLURM jobs maximum duration", self.duration_all,
-            re_format = r'\d{1,2}:\d{2}:\d{2}'
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "slurm.duration_all", self.duration_all)
-
         accepted, self.n_nodes_all = utl.user_input_type(
             "Number of nodes", self.n_nodes_all,
             val_type = int
@@ -574,17 +582,17 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.n_nodes_all", self.n_nodes_all)
 
-    def verify_slurm_config_hits(self):
-        """Verify slurm parameters in the interactive mode for the
-        CrystFEL refine run."""
-        accepted, self.duration_hits = utl.user_input_str(
-            "SLURM jobs maximum duration", self.duration_hits,
+        accepted, self.duration_all = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_all,
             re_format = r'\d{1,2}:\d{2}:\d{2}'
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "slurm.duration_hits", self.duration_hits)
+                self.overrides, "slurm.duration_all", self.duration_all)
 
+    def verify_slurm_config_hits(self):
+        """Verify slurm parameters in the interactive mode for the
+        CrystFEL refine run."""
         accepted, self.n_nodes_hits = utl.user_input_type(
             "Number of nodes", self.n_nodes_hits,
             val_type = int
@@ -592,6 +600,14 @@ class Workflow:
         if accepted:
             utl.set_dotdict_val(
                 self.overrides, "slurm.n_nodes_hits", self.n_nodes_hits)
+
+        accepted, self.duration_hits = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_hits,
+            re_format = r'\d{1,2}:\d{2}:\d{2}'
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.duration_hits", self.duration_hits)
 
     def verify_indexamajig_config_all(self):
         """Verify CrystFEL parameters in the interactive mode for the
@@ -734,6 +750,18 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "proc_fine.integration_radii",
                 self.integration_radii
+            )
+
+    def verify_run_proc_fine(self):
+        """Verify whether to perform second run of indexamajig."""
+        accepted, self.run_proc_fine = utl.user_input_type(
+            "Would you like to perform second run of indexamajig?",
+            self.run_proc_fine, val_type = bool
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_fine.execute",
+                self.run_proc_fine
             )
 
     def verify_frame_filter_config(self):
@@ -1073,7 +1101,13 @@ class Workflow:
             self.verify_merging_config()
         # Make links to the refined cell and output stream files
         utl.make_link(self.cell_file, part_dir)
-        utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
+        if self.run_proc_fine:
+            utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
+        else:
+            utl.make_link(
+                f"{self.list_prefix}.stream",
+                f"{part_dir}/{self.list_prefix}_hits.stream"
+            )
 
         crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
 
@@ -1101,20 +1135,23 @@ class Workflow:
         """ Last pass of the workflow:
             re-indexing, integration and scaling/merging
         """
-        print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------\n')
+        if self.reprocess and self.interactive:
+            self.verify_run_proc_fine()
+        if self.run_proc_fine:
+            print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------\n')
 
-        # Verify SLURM nodes config for the second CrystFEL run:
-        if self.interactive:
-            self.verify_slurm_config_hits()
-            self.verify_indexamajig_config_hits()
+            # Verify SLURM nodes config for the second CrystFEL run:
+            if self.interactive:
+                self.verify_slurm_config_hits()
+                self.verify_indexamajig_config_hits()
 
-        self.distribute_hits()
-        cell_keyword = self.get_cell_keyword()
+            self.distribute_hits()
+            cell_keyword = self.get_cell_keyword()
 
-        self.n_proc_frames_hits = self.wrap_process(
-            self.res_higher, cell_keyword, filtered=True)
-        smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
-        smr.report_cells(self.list_prefix, self.cell_info)
+            self.n_proc_frames_hits = self.wrap_process(
+                self.res_higher, cell_keyword, filtered=True)
+            smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
+            smr.report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
         self.merge_bragg_obs()
@@ -1212,12 +1249,16 @@ class Workflow:
             self.n_proc_frames_all = self.wrap_process(
                 self.res_lower, cell_keyword, filtered=False)
 
-        print('\n-----   TASK: filter crystal frames according to the'
-              ' unit cell parameters   -----\n')
         if self.interactive:
-            self.verify_frame_filter_config()
-        # first filter indexed frames, then update cell based on crystals found
-        self.fit_filtered_crystals()
+            self.verify_run_proc_fine()
+        if self.run_proc_fine:
+            print(
+                '\n-----   TASK: filter crystal frames according to the'
+                ' unit cell parameters   -----\n')
+            if self.interactive:
+                self.verify_frame_filter_config()
+            # filter indexed frames and update cell parameters
+            self.fit_filtered_crystals()
 
         self.process_late()
 

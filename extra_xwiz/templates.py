@@ -25,8 +25,6 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
-duration_hits = "0:30:00"
-n_nodes_hits = 4
 
 [proc_coarse]
 resolution = 4.0
@@ -39,6 +37,7 @@ peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 n_cores = -1
 local_bg_radius = 3
+integration_radii = "2,3,5"
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
@@ -46,13 +45,6 @@ extra_options = "--no-non-hits-in-stream"
 [unit_cell]
 file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
-
-[frame_filter]
-match_tolerance = 0.1
-
-[proc_fine]
-resolution = 2.0
-integration_radii = "2,3,5"
 
 [merging]
 point_group = "422"
@@ -107,6 +99,7 @@ peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 n_cores = -1
 local_bg_radius = 3
+integration_radii = "2,3,5"
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
@@ -119,8 +112,8 @@ run_refine = false
 match_tolerance = 0.1
 
 [proc_fine]
+execute = true
 resolution = 2.0
-integration_radii = "2,3,5"
 
 [partialator_split]
 execute = false
