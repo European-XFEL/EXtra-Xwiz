@@ -16,6 +16,7 @@ crystfel_info = {
             r'(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)',
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': False,
     },
 
     '0.9.1': {
@@ -25,6 +26,7 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': False,
     },
 
     '0.10.0': {
@@ -34,6 +36,7 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
     },
 
     '0.10.1': {
@@ -43,6 +46,7 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
     },
 
     'cfel_dev': {
@@ -53,5 +57,6 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
     },
 }

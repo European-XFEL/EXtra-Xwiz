@@ -122,10 +122,10 @@ class Workflow:
 
         self.list_prefix = conf['data']['list_prefix']
 
-        self._crystfel_version = conf['crystfel']['version']
-        if self._crystfel_version not in cri.crystfel_info.keys():
+        self.crystfel_version = conf['crystfel']['version']
+        if self.crystfel_version not in cri.crystfel_info.keys():
             raise ValueError(f'Unsupported CrystFEL version: '
-                             f'{self._crystfel_version}')
+                             f'{self.crystfel_version}')
 
         self.geometry = conf['geom']['file_path']
         self.vds_mask = geo.get_bad_pixel(self.geometry)
@@ -201,6 +201,9 @@ class Workflow:
         self.n_proc_frames_all = 0
         self.n_proc_frames_hits = 0
 
+        self.json_log = jlog.WorkflowJsonLog(self)
+
+
     def get_cell_keyword(self):
         """In case cell file exists - prepare a keyword for CrystFEL."""
         cell_keyword = ''
@@ -222,7 +225,7 @@ class Workflow:
         """ Write a batch-script wrapper for indexamajig from the relevant
             configuration parameters and start a process by sbatch submission
         """
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
 
         # Move list files to the slurm directory
@@ -261,6 +264,12 @@ class Workflow:
                 data_file_path = f"{job_dir}/{data_file_0}"
             copy_fields = utl.get_copy_hdf5_fields(data_file_path)
 
+        # Prepare extra options
+        if cri.crystfel_info[self.crystfel_version]['contain_harvest']:
+            harvest_option = "--harvest-file=crystfel_harvest.json"
+        else:
+            harvest_option = ""
+
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(tmp.PROC_CXI_BASH_SLURM % {
@@ -274,7 +283,8 @@ class Workflow:
                     'INDEX_METHOD': self.index_method,
                     'INT_RADII': self.integration_radii,
                     'COPY_FIELDS': copy_fields,
-                    'EXTRA_OPTIONS': self.indexamajig_extra_options
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options,
+                    'HARVEST_OPTION': harvest_option
                 })
             else:
                 f.write(tmp.PROC_VDS_BASH_SLURM % {
@@ -295,7 +305,8 @@ class Workflow:
                     'MAX_RES': self.max_res,
                     'MIN_PEAKS': self.min_peaks,
                     'COPY_FIELDS': copy_fields,
-                    'EXTRA_OPTIONS': self.indexamajig_extra_options
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options,
+                    'HARVEST_OPTION': harvest_option
                 })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
@@ -329,8 +340,11 @@ class Workflow:
             job_id,
             job_dir,
             n_frames,
-            self._crystfel_version)
+            self.crystfel_version)
         self.concat(job_dir, filtered)
+
+        self.json_log.save_crystfel_job(f"indexamajig_{self.step}", job_dir)
+
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
         smr.report_step_rate(
@@ -615,13 +629,13 @@ class Workflow:
         coarse run."""
         cri_keys_str = " / ".join(cri.crystfel_info.keys())
         cri_keys_re = utl.list_to_re(cri.crystfel_info.keys())
-        accepted, self._crystfel_version = utl.user_input_str(
-            f"CrystFEL version ({cri_keys_str})", self._crystfel_version,
+        accepted, self.crystfel_version = utl.user_input_str(
+            f"CrystFEL version ({cri_keys_str})", self.crystfel_version,
             cri_keys_re
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "crystfel.version", self._crystfel_version)
+                self.overrides, "crystfel.version", self.crystfel_version)
 
         accepted, self.res_lower = utl.user_input_type(
             "Processing resolution limit in Å for the coarse run",
@@ -952,7 +966,7 @@ class Workflow:
         """Identify initial unit cell from a relatively small number of frames
            indexed w/o prior cell
         """
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
 
         with open('_cell_explorer.sh', 'w') as f:
             f.write(tmp.CELL_EXPLORER_WRAP % {
@@ -996,7 +1010,7 @@ class Workflow:
         col_foms = [3, 6, 1, 1, 1]
         col_nref = [1, 1, 2, 2, 2]
 
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
 
         for i_ds, dataset in enumerate(datasets):
             if dataset == pspl.ALL_DATASET:
@@ -1110,7 +1124,7 @@ class Workflow:
                 f"{part_dir}/{self.list_prefix}_hits.stream"
             )
 
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
 
         # scale and average using partialator
         with open(f'{part_dir}/_tmp_partialator.sh', 'w') as f:
@@ -1128,7 +1142,9 @@ class Workflow:
 
         part_foms = self.get_partialator_foms(part_datasets, part_dir)
         part_foms.to_netcdf(f"{part_dir}/datasets_foms.nc")
-        jlog.save_partialator_foms(part_foms, part_dir)
+
+        self.json_log.save_partialator_foms(part_foms)
+
         smr.report_merging_metrics(part_foms, self.list_prefix)
 
 
@@ -1157,8 +1173,12 @@ class Workflow:
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
         self.merge_bragg_obs()
 
+        self.json_log.save_partialator()
+
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)
+
+        self.json_log.write_json()
 
 
     def check_late_entrance(self):
@@ -1209,6 +1229,8 @@ class Workflow:
                 # virtual CXI data set pointing to EuXFEL proc run
                 self.make_virtual()
 
+        self.json_log.save_data()
+
         print('\n-----   TASK: distribute data over SLURM nodes   -----\n')
 
         if self.interactive:
@@ -1237,6 +1259,8 @@ class Workflow:
 
         if self.interactive:
             self.verify_indexamajig_config_all()
+
+        self.json_log.save_crystfel_ver()
 
         self.n_proc_frames_all = self.wrap_process(
             self.res_lower, cell_keyword, filtered=False)

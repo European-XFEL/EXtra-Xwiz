@@ -176,6 +176,12 @@ fi
 echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
 echo ""
 
+HARVEST_OPT=""
+if [[ "${SLURM_ARRAY_TASK_ID}" == "0" ]]
+then
+  HARVEST_OPT="%(HARVEST_OPTION)s"
+fi
+
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
@@ -192,7 +198,7 @@ indexamajig \\
   --local-bg-radius=%(LOCAL_BG_RADIUS)s \\
   --max-res=%(MAX_RES)s \\
   --min-peaks=%(MIN_PEAKS)s \\
-%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s $HARVEST_OPT
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
@@ -223,6 +229,12 @@ fi
 echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
 echo ""
 
+HARVEST_OPT=""
+if [[ "${SLURM_ARRAY_TASK_ID}" == "0" ]]
+then
+  HARVEST_OPT=%(HARVEST_OPTION)s
+fi
+
 indexamajig \\
   -i %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.lst \\
   -o %(PREFIX)s_${SLURM_ARRAY_TASK_ID}.stream \\
@@ -232,7 +244,7 @@ indexamajig \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
   --indexing=%(INDEX_METHOD)s \\
-%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s $HARVEST_OPT
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
