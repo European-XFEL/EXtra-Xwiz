@@ -45,7 +45,8 @@ setup(
             "xwiz-workflow = extra_xwiz.workflow:main",
             "xwiz-mask-hd52geom = extra_xwiz.mask_converter.mask_hd52geom:main",
             "xwiz-mask-geom2hd5 = extra_xwiz.mask_converter.mask_geom2hd5:main",
-            "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main"
+            "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main",
+            "xwiz-import-project = extra_xwiz.import_cryst_project:main",
         ],
     },
     install_requires=[
