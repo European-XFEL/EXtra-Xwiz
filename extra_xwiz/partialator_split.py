@@ -207,7 +207,7 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
     file with a list of laser states per pulse."""
     laser_state.to_netcdf(f"{folder}/laser_per_train_pulse.nc")
     pattern_mismatch = laser_state.data[1:] != laser_state.data[:-1]
-    n_mismatch = np.where(pattern_mismatch)[0].shape[0]
+    n_mismatch = np.unique(np.where(pattern_mismatch)[0]).shape[0]
     if n_mismatch > 0:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
