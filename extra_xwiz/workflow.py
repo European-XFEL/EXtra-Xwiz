@@ -1075,11 +1075,8 @@ class Workflow:
 
         part_foms = xr.DataArray(
             part_foms_arr,
-            coords={
-                "dataset": datasets,
-                "shell": ["overall", "outer shell"],
-                "fom": foms
-            }
+            coords=[datasets, ["overall", "outer shell"], foms],
+            dims=["dataset", "shell", "fom"]
         )
         return part_foms
 
