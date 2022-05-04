@@ -45,17 +45,20 @@ setup(
             "xwiz-workflow = extra_xwiz.workflow:main",
             "xwiz-mask-hd52geom = extra_xwiz.mask_converter.mask_hd52geom:main",
             "xwiz-mask-geom2hd5 = extra_xwiz.mask_converter.mask_geom2hd5:main",
-            "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main"
+            "xwiz-scan-parameters = extra_xwiz.param_scan.scan_parameters:main",
+            "xwiz-import-project = extra_xwiz.import_cryst_project:main",
         ],
     },
     install_requires=[
         'h5py',
+        'matplotlib',
         'numpy',
         'pandas',
         'scipy',
         'toml',
         'xarray',
         'findxfel>=0.1.1',
+        'extra_data>=1.4',
     ],
     extras_require={
         'docs': [],

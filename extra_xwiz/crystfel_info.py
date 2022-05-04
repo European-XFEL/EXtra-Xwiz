@@ -16,6 +16,7 @@ crystfel_info = {
             r'(\s*\d*.indexable out of |Final:)(\s?\d*\s)(p|i)',
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': False,
     },
 
     '0.9.1': {
@@ -25,6 +26,7 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': False,
     },
 
     '0.10.0': {
@@ -34,15 +36,27 @@ crystfel_info = {
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
+    },
+
+    '0.10.1': {
+        'import':
+            'module load maxwell crystfel/0.10.1',
+        'log_frames_pattern':
+            FRAMES_PATTERN_9,
+        'log_crystals_pattern':
+            CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
     },
 
     'cfel_dev': {
         'import':
             'export PATH='
-            '/gpfs/cfel/cxi/common/public/development/crystfel/bin:$PATH',
+            '/gpfs/cfel/group/cxi/common/public/development/crystfel/bin:$PATH',
         'log_frames_pattern':
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
             CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
     },
 }

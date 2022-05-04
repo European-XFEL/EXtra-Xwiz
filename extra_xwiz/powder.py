@@ -93,7 +93,7 @@ def main(argv=None):
     conf = config.load_from_file()
     n_frames = read_size_from_file(args.vds_in)
     crystfel_version = conf['crystfel']['version']
-    max_frames = conf['data']['n_frames']
+    max_frames = conf['data']['n_frames_total']
     geom = conf['geom']['file_path']
     if max_frames < n_frames:
         print(f' truncation to {max_frames} frames.')

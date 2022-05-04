@@ -285,6 +285,7 @@ def replace_cell(fn, const_values):
             f_out.write(new_cryst)
     else:
         warnings.warn(' Cell file is of unknown type (by extension)!')
+    return fn_refined
 
 
 def cell_as_string(cell_file):
@@ -740,3 +741,26 @@ def user_input_path(
             return False, default
         else:
             print("Please provide an existing path.")
+
+
+def table_weighted_average(
+    table: list, col_value: int, col_weight: int
+) -> float:
+    """Weighted average over the table of values.
+
+    Parameters
+    ----------
+    table : list
+        List of strings with table lines as space separated values.
+    col_value : int
+        Index of the column with values to average.
+    col_weight : int
+        Index of the column with weights.
+    """
+    w_sum = 0.0
+    f_sum = 0.0
+    for line in table:
+        item = line.split()
+        w_sum += int(item[col_weight])
+        f_sum += (int(item[col_weight]) * float(item[col_value]))
+    return (f_sum / w_sum)

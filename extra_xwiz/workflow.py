@@ -8,14 +8,17 @@ import re
 import shutil
 import subprocess
 import warnings
+import xarray as xr
 
 import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
 from . import geometry as geo
-from . import utilities as utl
+from . import json_log as jlog
+from . import partialator_split as pspl
 from . import templates as tmp
+from . import utilities as utl
 from . import summary as smr
 
 
@@ -77,7 +80,7 @@ class Workflow:
             self.vds_names = utl.string_to_list(conf['data']['vds_names'])
         else:
             self.vds_names = utl.into_list(conf['data']['vds_names'])
-        if not len(self.vds_names) == len(self.data_runs_paths):
+        if len(self.vds_names) != len(self.data_runs_paths):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         if 'cxi_names' in conf['data']:
@@ -119,10 +122,10 @@ class Workflow:
 
         self.list_prefix = conf['data']['list_prefix']
 
-        self._crystfel_version = conf['crystfel']['version']
-        if self._crystfel_version not in cri.crystfel_info.keys():
+        self.crystfel_version = conf['crystfel']['version']
+        if self.crystfel_version not in cri.crystfel_info.keys():
             raise ValueError(f'Unsupported CrystFEL version: '
-                             f'{self._crystfel_version}')
+                             f'{self.crystfel_version}')
 
         self.geometry = conf['geom']['file_path']
         self.vds_mask = geo.get_bad_pixel(self.geometry)
@@ -136,12 +139,9 @@ class Workflow:
             )
 
         self.n_nodes_all = conf['slurm']['n_nodes_all']
-        self.n_nodes_hits = conf['slurm']['n_nodes_hits']
         self.partition = conf['slurm']['partition']
         self.duration_all = conf['slurm']['duration_all']
-        self.duration_hits = conf['slurm']['duration_hits']
         self.res_lower = conf['proc_coarse']['resolution']
-        self.res_higher = conf['proc_fine']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
         self.peak_snr = conf['proc_coarse']['peak_snr']
@@ -150,6 +150,11 @@ class Workflow:
         self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
         self.index_method = conf['proc_coarse']['index_method']
         self.local_bg_radius = conf['proc_coarse']['local_bg_radius']
+        if 'integration_radii' in conf['proc_coarse']:
+            self.integration_radii = conf['proc_coarse']['integration_radii']
+        else:
+            self.integration_radii = conf['proc_fine']['integration_radii']
+            warnings.warn("Please move 'integration_radii' to 'proc_coarse'.")
         self.max_res = conf['proc_coarse']['max_res']
         self.min_peaks = conf['proc_coarse']['min_peaks']
         self.indexamajig_n_cores = conf['proc_coarse']['n_cores']
@@ -157,8 +162,31 @@ class Workflow:
 
         self.cell_file = conf['unit_cell']['file']
         self.cell_run_refine = conf['unit_cell']['run_refine']
-        self.cell_tolerance = conf['frame_filter']['match_tolerance']
-        self.integration_radii = conf['proc_fine']['integration_radii']
+
+        if ('proc_fine' not in conf
+            or ('execute' in conf['proc_fine']
+                and not conf['proc_fine']['execute'])):
+            self.run_proc_fine = False
+            self.res_higher = self.res_lower
+            self.n_nodes_hits = conf['slurm'].get('n_nodes_hits')
+            self.duration_hits = conf['slurm'].get('duration_hits')
+            self.cell_tolerance = conf.get(
+                'frame_filter', {}).get('match_tolerance')
+        else:
+            self.run_proc_fine = True
+            self.n_nodes_hits = conf['slurm']['n_nodes_hits']
+            self.duration_hits = conf['slurm']['duration_hits']
+            self.cell_tolerance = conf['frame_filter']['match_tolerance']
+            self.res_higher = conf['proc_fine']['resolution']
+
+        if ('partialator_split' in conf
+            and conf['partialator_split']['execute']
+            ):
+            self.run_partialator_split = True
+            self.partialator_split_config = conf['partialator_split']
+        else:
+            self.run_partialator_split = False
+
         self.point_group = conf['merging']['point_group']
         self.scale_model = conf['merging']['scaling_model']
         self.scale_iter = conf['merging']['scaling_iterations']
@@ -172,6 +200,9 @@ class Workflow:
         # store total number of processed frames in the slurm jobs
         self.n_proc_frames_all = 0
         self.n_proc_frames_hits = 0
+
+        self.json_log = jlog.WorkflowJsonLog(self)
+
 
     def get_cell_keyword(self):
         """In case cell file exists - prepare a keyword for CrystFEL."""
@@ -194,7 +225,7 @@ class Workflow:
         """ Write a batch-script wrapper for indexamajig from the relevant
             configuration parameters and start a process by sbatch submission
         """
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
         prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
 
         # Move list files to the slurm directory
@@ -233,6 +264,12 @@ class Workflow:
                 data_file_path = f"{job_dir}/{data_file_0}"
             copy_fields = utl.get_copy_hdf5_fields(data_file_path)
 
+        # Prepare extra options
+        if cri.crystfel_info[self.crystfel_version]['contain_harvest']:
+            harvest_option = "--harvest-file=crystfel_harvest.json"
+        else:
+            harvest_option = ""
+
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
                 f.write(tmp.PROC_CXI_BASH_SLURM % {
@@ -246,7 +283,8 @@ class Workflow:
                     'INDEX_METHOD': self.index_method,
                     'INT_RADII': self.integration_radii,
                     'COPY_FIELDS': copy_fields,
-                    'EXTRA_OPTIONS': self.indexamajig_extra_options
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options,
+                    'HARVEST_OPTION': harvest_option
                 })
             else:
                 f.write(tmp.PROC_VDS_BASH_SLURM % {
@@ -267,7 +305,8 @@ class Workflow:
                     'MAX_RES': self.max_res,
                     'MIN_PEAKS': self.min_peaks,
                     'COPY_FIELDS': copy_fields,
-                    'EXTRA_OPTIONS': self.indexamajig_extra_options
+                    'EXTRA_OPTIONS': self.indexamajig_extra_options,
+                    'HARVEST_OPTION': harvest_option
                 })
         slurm_args = ['sbatch',
                       f'--partition={self.partition}',
@@ -296,12 +335,16 @@ class Workflow:
             job_dir, res_limit, cell_keyword, n_nodes, job_duration,
             filtered=filtered
         )
+        jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
         n_proc_frames = utl.wait_or_cancel(
             job_id,
             job_dir,
             n_frames,
-            self._crystfel_version)
+            self.crystfel_version)
         self.concat(job_dir, filtered)
+
+        self.json_log.save_crystfel_job(f"indexamajig_{self.step}", job_dir)
+
         stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
         smr.report_step_rate(
@@ -546,14 +589,6 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.partition", self.partition)
 
-        accepted, self.duration_all = utl.user_input_str(
-            "SLURM jobs maximum duration", self.duration_all,
-            re_format = r'\d{1,2}:\d{2}:\d{2}'
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "slurm.duration_all", self.duration_all)
-
         accepted, self.n_nodes_all = utl.user_input_type(
             "Number of nodes", self.n_nodes_all,
             val_type = int
@@ -562,17 +597,17 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.n_nodes_all", self.n_nodes_all)
 
-    def verify_slurm_config_hits(self):
-        """Verify slurm parameters in the interactive mode for the
-        CrystFEL refine run."""
-        accepted, self.duration_hits = utl.user_input_str(
-            "SLURM jobs maximum duration", self.duration_hits,
+        accepted, self.duration_all = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_all,
             re_format = r'\d{1,2}:\d{2}:\d{2}'
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "slurm.duration_hits", self.duration_hits)
+                self.overrides, "slurm.duration_all", self.duration_all)
 
+    def verify_slurm_config_hits(self):
+        """Verify slurm parameters in the interactive mode for the
+        CrystFEL refine run."""
         accepted, self.n_nodes_hits = utl.user_input_type(
             "Number of nodes", self.n_nodes_hits,
             val_type = int
@@ -581,18 +616,26 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.n_nodes_hits", self.n_nodes_hits)
 
+        accepted, self.duration_hits = utl.user_input_str(
+            "SLURM jobs maximum duration", self.duration_hits,
+            re_format = r'\d{1,2}:\d{2}:\d{2}'
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.duration_hits", self.duration_hits)
+
     def verify_indexamajig_config_all(self):
         """Verify CrystFEL parameters in the interactive mode for the
         coarse run."""
         cri_keys_str = " / ".join(cri.crystfel_info.keys())
         cri_keys_re = utl.list_to_re(cri.crystfel_info.keys())
-        accepted, self._crystfel_version = utl.user_input_str(
-            f"CrystFEL version ({cri_keys_str})", self._crystfel_version,
+        accepted, self.crystfel_version = utl.user_input_str(
+            f"CrystFEL version ({cri_keys_str})", self.crystfel_version,
             cri_keys_re
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "crystfel.version", self._crystfel_version)
+                self.overrides, "crystfel.version", self.crystfel_version)
 
         accepted, self.res_lower = utl.user_input_type(
             "Processing resolution limit in Å for the coarse run",
@@ -668,6 +711,16 @@ class Workflow:
                 self.local_bg_radius
             )
 
+        accepted, self.integration_radii = utl.user_input_str(
+            "Integration radii around predicted Bragg-peak positions",
+            self.integration_radii, re_format = r'\d,\d,\d'
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "proc_coarse.integration_radii",
+                self.integration_radii
+            )
+
         accepted, self.max_res = utl.user_input_type(
             "Maximum radius from the detector center to accepted peaks",
             self.max_res, val_type = int
@@ -714,14 +767,16 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "proc_fine.resolution", self.res_higher)
 
-        accepted, self.integration_radii = utl.user_input_str(
-            "Integration radii around predicted Bragg-peak positions",
-            self.integration_radii, re_format = r'\d,\d,\d'
+    def verify_run_proc_fine(self):
+        """Verify whether to perform second run of indexamajig."""
+        accepted, self.run_proc_fine = utl.user_input_type(
+            "Would you like to perform second run of indexamajig?",
+            self.run_proc_fine, val_type = bool
         )
         if accepted:
             utl.set_dotdict_val(
-                self.overrides, "proc_fine.integration_radii",
-                self.integration_radii
+                self.overrides, "proc_fine.execute",
+                self.run_proc_fine
             )
 
     def verify_frame_filter_config(self):
@@ -911,7 +966,7 @@ class Workflow:
         """Identify initial unit cell from a relatively small number of frames
            indexed w/o prior cell
         """
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
 
         with open('_cell_explorer.sh', 'w') as f:
             f.write(tmp.CELL_EXPLORER_WRAP % {
@@ -941,21 +996,132 @@ class Workflow:
         if self.cell_run_refine:
             print('\n-----   TASK: refine unit cell parameters   -----\n')
             refined_cell = utl.fit_unit_cell(self.cell_ensemble)
-            utl.replace_cell(self.cell_file, refined_cell)
-            self.cell_file = utl.get_refined_cell_name(self.cell_file)
+            self.cell_file = utl.replace_cell(self.cell_file, refined_cell)
+
+    def get_partialator_foms(
+        self, datasets: list, folder: str
+    ) -> xr.DataArray:
+        n_datasets = len(datasets)
+        part_foms_arr = np.zeros((n_datasets, 2, 5))
+        foms = ["Completeness", "Signal-over-noise", "CC_1/2", "CC*",
+                "R_split"]
+        foms_tag = ['completeness', 'completeness', 'CC', 'CCstar', 'Rsplit']
+        foms_log = ['', '<snr>', 'CC', 'CC*', 'Rsplit']
+        col_foms = [3, 6, 1, 1, 1]
+        col_nref = [1, 1, 2, 2, 2]
+
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
+
+        for i_ds, dataset in enumerate(datasets):
+            if dataset == pspl.ALL_DATASET:
+                ds_suffix = ""
+            else:
+                ds_suffix = f"-{dataset}"
+
+            log_items = []
+            # create simple resolution-bin table
+            with open(f'{folder}/_tmp_table_gen.sh', 'w') as f:
+                f.write(tmp.CHECK_HKL_WRAP % {
+                    'IMPORT_CRYSTFEL': crystfel_import,
+                    'PREFIX': self.list_prefix,
+                    'DS_SUFFIX': ds_suffix,
+                    'POINT_GROUP': self.point_group,
+                    'UNIT_CELL': self.cell_file,
+                    'HIGH_RES': self.res_higher
+                })
+            out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
+                cwd=folder, stderr=subprocess.STDOUT)
+            log_items.extend(out.decode('utf-8').split())
+
+            # create resolution-bin tables based on half-sets
+            for i in range(2,5):
+                with open(f'{folder}/_tmp_table_gen{i}.sh', 'w') as f:
+                    f.write(tmp.COMPARE_HKL_WRAP % {
+                        'IMPORT_CRYSTFEL': crystfel_import,
+                        'PREFIX': self.list_prefix,
+                        'DS_SUFFIX': ds_suffix,
+                        'POINT_GROUP': self.point_group,
+                        'UNIT_CELL': self.cell_file,
+                        'HIGH_RES': self.res_higher,
+                        'FOM': foms_tag[i]
+                    })
+                out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
+                    cwd=folder, stderr=subprocess.STDOUT)
+                log_items.extend(out.decode('utf-8').split())
+
+            for fn in glob(f'{folder}/_tmp*'):
+                os.remove(fn)
+
+            for i_fom in range(5):
+                table = f"{self.list_prefix}_{foms_tag[i_fom]}{ds_suffix}.dat"
+                with open(f"{folder}/{table}", 'r') as f_table:
+                    table_lines = f_table.readlines()[1:]
+
+                c_fom = col_foms[i_fom]
+                c_ref = col_nref[i_fom]
+
+                if i_fom == 0:
+                    fom_all = utl.table_weighted_average(
+                        table_lines, c_fom, c_ref
+                    )
+                else:
+                    fom_all = float(
+                        log_items[log_items.index(foms_log[i_fom]) + 2]
+                    )
+                fom_outer = float(table_lines[-1].split()[c_fom])
+
+                part_foms_arr[i_ds, 0, i_fom] = fom_all
+                part_foms_arr[i_ds, 1, i_fom] = fom_outer
+
+        part_foms = xr.DataArray(
+            part_foms_arr,
+            coords=[datasets, ["overall", "outer shell"], foms],
+            dims=["dataset", "shell", "fom"]
+        )
+        return part_foms
 
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
         """
-
-        # Prepare a directory to store partialator input and output
+        # Prepare a folder to store partialator input and output
         part_dir = f"./partialator"
         utl.make_new_dir(part_dir)
+
+        # Prepare partialator list file(s) for splitting frames into datasets
+        if self.run_partialator_split:
+            print("Preparing list files to split frames into datasets.\n")
+            frame_datasets = []
+            splitter_datasets = set()
+            ds_names = self.cxi_names if self.use_peaks else self.vds_names
+            for ds_run, ds_name in zip(self.data_runs, ds_names):
+                utl.make_link(ds_name, part_dir)
+                splitter = pspl.DatasetSplitter(
+                    self.data_proposal, ds_run, ds_name, part_dir,
+                    self.partialator_split_config
+                )
+                frame_datasets.extend(splitter.get_split_list())
+                splitter_datasets |= splitter.all_datasets
+            with open(f"{part_dir}/partialator_datasets.plst", 'w') as f_out:
+                f_out.write("\n".join(frame_datasets))
+            part_split_arg = "--custom-split partialator_datasets.plst"
+            part_datasets = [pspl.ALL_DATASET] + sorted(splitter_datasets)
+        else:
+            part_split_arg = ""
+            part_datasets = [pspl.ALL_DATASET]
+
+        if self.interactive:
+            self.verify_merging_config()
         # Make links to the refined cell and output stream files
         utl.make_link(self.cell_file, part_dir)
-        utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
+        if self.run_proc_fine:
+            utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
+        else:
+            utl.make_link(
+                f"{self.list_prefix}.stream",
+                f"{part_dir}/{self.list_prefix}_hits.stream"
+            )
 
-        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+        crystfel_import = cri.crystfel_info[self.crystfel_version]['import']
 
         # scale and average using partialator
         with open(f'{part_dir}/_tmp_partialator.sh', 'w') as f:
@@ -965,72 +1131,51 @@ class Workflow:
                 'POINT_GROUP': self.point_group,
                 'N_ITER': self.scale_iter,
                 'MODEL': self.scale_model,
-                'MAX_ADU': self.max_adu
+                'MAX_ADU': self.max_adu,
+                'PARTIALATOR_SPLIT': part_split_arg
             })
         subprocess.check_output(['sh', '_tmp_partialator.sh'],
             cwd=part_dir, stderr=subprocess.STDOUT)
 
-        log_items = []
-        # create simple resolution-bin table
-        with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
-            f.write(tmp.CHECK_HKL_WRAP % {
-                'IMPORT_CRYSTFEL': crystfel_import,
-                'PREFIX': self.list_prefix,
-                'POINT_GROUP': self.point_group,
-                'UNIT_CELL': self.cell_file,
-                'HIGH_RES': self.res_higher
-            })
-        out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
-            cwd=part_dir, stderr=subprocess.STDOUT)
-        log_items.extend(out.decode('utf-8').split())
+        part_foms = self.get_partialator_foms(part_datasets, part_dir)
+        part_foms.to_netcdf(f"{part_dir}/datasets_foms.nc")
 
-        # create resolution-bin tables based on half-sets
-        for i in range(3):
-            with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
-                f.write(tmp.COMPARE_HKL_WRAP % {
-                    'IMPORT_CRYSTFEL': crystfel_import,
-                    'PREFIX': self.list_prefix,
-                    'POINT_GROUP': self.point_group,
-                    'UNIT_CELL': self.cell_file,
-                    'HIGH_RES': self.res_higher,
-                    'FOM': ['CC', 'CCstar', 'Rsplit'][i],
-                    'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
-                })
-            out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
-                cwd=part_dir, stderr=subprocess.STDOUT)
-            log_items.extend(out.decode('utf-8').split())
+        self.json_log.save_partialator_foms(part_foms)
 
-        for fn in glob(f'{part_dir}/_tmp*'):
-            os.remove(fn)
-        smr.report_merging_metrics(part_dir, self.list_prefix, log_items)
+        smr.report_merging_metrics(part_foms, self.list_prefix)
+
 
     def process_late(self):
         """ Last pass of the workflow:
             re-indexing, integration and scaling/merging
         """
-        print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------\n')
+        if self.reprocess and self.interactive:
+            self.verify_run_proc_fine()
+        if self.run_proc_fine:
+            print('\n-----   TASK: run CrystFEL with refined cell and filtered frames   ------\n')
 
-        # Verify SLURM nodes config for the second CrystFEL run:
-        if self.interactive:
-            self.verify_slurm_config_hits()
-            self.verify_indexamajig_config_hits()
+            # Verify SLURM nodes config for the second CrystFEL run:
+            if self.interactive:
+                self.verify_slurm_config_hits()
+                self.verify_indexamajig_config_hits()
 
-        self.distribute_hits()
-        cell_keyword = self.get_cell_keyword()
+            self.distribute_hits()
+            cell_keyword = self.get_cell_keyword()
 
-        self.n_proc_frames_hits = self.wrap_process(
-            self.res_higher, cell_keyword, filtered=True)
-        smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
-        smr.report_cells(self.list_prefix, self.cell_info)
+            self.n_proc_frames_hits = self.wrap_process(
+                self.res_higher, cell_keyword, filtered=True)
+            smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
+            smr.report_cells(self.list_prefix, self.cell_info)
 
         print('\n-----   TASK: scale/merge data and create statistics -----\n')
-        if self.interactive:
-            self.verify_merging_config()
-
         self.merge_bragg_obs()
+
+        self.json_log.save_partialator()
 
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)
+
+        self.json_log.write_json()
 
 
     def check_late_entrance(self):
@@ -1081,6 +1226,8 @@ class Workflow:
                 # virtual CXI data set pointing to EuXFEL proc run
                 self.make_virtual()
 
+        self.json_log.save_data()
+
         print('\n-----   TASK: distribute data over SLURM nodes   -----\n')
 
         if self.interactive:
@@ -1110,6 +1257,8 @@ class Workflow:
         if self.interactive:
             self.verify_indexamajig_config_all()
 
+        self.json_log.save_crystfel_ver()
+
         self.n_proc_frames_all = self.wrap_process(
             self.res_lower, cell_keyword, filtered=False)
 
@@ -1122,12 +1271,16 @@ class Workflow:
             self.n_proc_frames_all = self.wrap_process(
                 self.res_lower, cell_keyword, filtered=False)
 
-        print('\n-----   TASK: filter crystal frames according to the'
-              ' unit cell parameters   -----\n')
         if self.interactive:
-            self.verify_frame_filter_config()
-        # first filter indexed frames, then update cell based on crystals found
-        self.fit_filtered_crystals()
+            self.verify_run_proc_fine()
+        if self.run_proc_fine:
+            print(
+                '\n-----   TASK: filter crystal frames according to the'
+                ' unit cell parameters   -----\n')
+            if self.interactive:
+                self.verify_frame_filter_config()
+            # filter indexed frames and update cell parameters
+            self.fit_filtered_crystals()
 
         self.process_late()
 
