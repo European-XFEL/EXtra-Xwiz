@@ -166,7 +166,8 @@ def get_laser_state_from_diode(
     n_pulses = pulse_ids.shape[0]
     laser_per_pulse_arr = np.zeros((len(data_run.train_ids), n_pulses))
 
-    data_select = data_run.select([xray_signal_src, laser_signal_src]).trains()
+    data_select = data_run.select(
+        [xray_signal_src, laser_signal_src]).trains(require_all=True)
     for train_id, data in data_select:
         xray_signal = np.array(data[xray_signal_src[0]][xray_signal_src[1]])
         laser_signal = np.array(data[laser_signal_src[0]][laser_signal_src[1]])
@@ -206,7 +207,7 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
     file with a list of laser states per pulse."""
     laser_state.to_netcdf(f"{folder}/laser_per_train_pulse.nc")
     pattern_mismatch = laser_state.data[1:] != laser_state.data[:-1]
-    n_mismatch = np.where(pattern_mismatch)[0].shape[0]
+    n_mismatch = np.unique(np.where(pattern_mismatch)[0]).shape[0]
     if n_mismatch > 0:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
