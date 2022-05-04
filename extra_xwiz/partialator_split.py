@@ -196,7 +196,8 @@ def get_laser_state_from_diode(
         
     laser_per_train_pulse = xr.DataArray(
         laser_per_pulse_arr,
-        coords={"trainId": data_run.train_ids, "pulseId": pulse_ids}
+        coords=[data_run.train_ids, pulse_ids],
+        dims=["trainId", "pulseId"]
     )
     return laser_per_train_pulse
 
