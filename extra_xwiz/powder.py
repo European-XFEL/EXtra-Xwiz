@@ -88,6 +88,7 @@ def main(argv=None):
     ap = ArgumentParser(prog='powder.py')
     ap.add_argument('vds_in', help='input VDS file name (multi-frame data)')
     ap.add_argument('h5_out', help='output HDF5 file name (virtual powder image)')
+    ap.add_argument('--display', help='optional display')
     args = ap.parse_args(argv)
 
     conf = config.load_from_file()
@@ -100,5 +101,6 @@ def main(argv=None):
     n_frames = int(min(n_frames, max_frames))
     max_data = pix_max_over_frames(args.vds_in, n_frames)
     write_hdf5(max_data, args.h5_out)
-    display_hdf5(args.h5_out, geom, crystfel_version)
+    if args.display is None:
+    	display_hdf5(args.h5_out, geom, crystfel_version)
 
