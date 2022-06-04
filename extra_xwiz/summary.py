@@ -51,15 +51,16 @@ def create_new_summary(prefix, conf, is_interactive, use_cheetah):
         sum_file.write('\n')
 
 
-def report_step_rate(prefix, stream_file, step, res_limit, n_frames):
-    """Parse assembled indexamajig stream file for frames and crystals.
-       Calculate indexing rate and report to summary file.
+def report_step_rate(
+    prefix: str, step: int, res_limit: float, results: dict
+    ):
+    """Report number of processed frames, found crystals and indexing
+    rate and to the summary file.
     """
-    if not os.path.exists(stream_file):
+    n_cryst = results['n_crystals']
+    n_frames = results['n_frames']
+    if n_cryst is None:
         return
-    n_cryst = len(
-        re.findall('Cell parameters', open(stream_file).read(), re.DOTALL)
-    )
     indexing_rate = 100.0 * n_cryst / n_frames
     with open(f'{prefix}.summary', 'a') as f:
         f.write(

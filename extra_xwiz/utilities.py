@@ -141,15 +141,29 @@ def calc_progress(out_logs, n_total, crystfel_version):
     return n_frames_total
 
 
-def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
-    """
-    Monitor slurm jobs and prepare progress bar.
+def wait_or_cancel(
+    job_id: str, job_dir: str, n_total: int, crystfel_version: str,
+    silent: bool
+    ) -> int:
+    """Monitor slurm jobs and prepare progress bar.
 
-    Args:
-        job_id (int): id of the slurm job-array.
-        job_dir (string): slurm processing directory.
-        n_total (int): total number of frames to be processed.
-        crystfel_version (string): version of the CrystFEL in use.
+    Parameters
+    ----------
+    job_id : str
+        Id of the slurm job-array.
+    job_dir : str
+        Slurm processing folder.
+    n_total : int
+        Total number of frames to be processed.
+    crystfel_version : str
+        Version of CrystFEL in use.
+    silent : bool
+        Whether to skip updating the progress bar.
+
+    Returns
+    -------
+    int
+        Total number of processed frames.
     """
     print(' Waiting for job-array', job_id)
     while True:
@@ -159,7 +173,8 @@ def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
             break
 
         out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
-        calc_progress(out_logs, n_total, crystfel_version)
+        if not silent:
+            calc_progress(out_logs, n_total, crystfel_version)
 
         time.sleep(1)
     # To ensure all frames have been processed
