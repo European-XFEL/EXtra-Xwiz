@@ -14,6 +14,7 @@ import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
+from . import crystfel_utilities as cru
 from . import geometry as geo
 from . import json_log as jlog
 from . import partialator_split as pspl
@@ -25,8 +26,8 @@ from . import summary as smr
 class Workflow:
 
     def __init__(self, home_dir, work_dir, self_dir, automatic=False,
-                 diagnostic=False, reprocess=False, use_peaks=False,
-                 use_cheetah=False):
+                 diagnostic=False, silent=False, reprocess=False,
+                 use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
@@ -35,6 +36,7 @@ class Workflow:
         self.self_dir = self_dir
         self.interactive = not automatic
         self.diagnostic = diagnostic
+        self.silent = silent
         self.reprocess = reprocess
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
@@ -337,21 +339,22 @@ class Workflow:
         )
         jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
         n_proc_frames = utl.wait_or_cancel(
-            job_id,
-            job_dir,
-            n_frames,
-            self.crystfel_version)
+            job_id, job_dir, n_frames, self.crystfel_version, self.silent)
         self.concat(job_dir, filtered)
 
-        self.json_log.save_crystfel_job(f"indexamajig_{self.step}", job_dir)
-
-        stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
+        stream_file = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
+        cryst_results = {}
+        cryst_results['n_frames'] = n_proc_frames
+        cryst_results['n_hits'] = cru.get_n_hits(stream_file, self.min_peaks)
+        cryst_results['n_crystals'] = cru.get_n_crystals(stream_file)
+
+        self.json_log.save_crystfel_job(
+            f"indexamajig_{self.step}", job_dir, cryst_results)
+
         smr.report_step_rate(
-            self.list_prefix, stream_file_name, self.step, res_limit,
-            n_proc_frames
-        )
-        # self.clean_up(job_id, filtered)
+            self.list_prefix, self.step, res_limit, cryst_results)
+
         if not self.diagnostic:
             utl.remove_path(job_dir)
         return n_proc_frames
@@ -941,19 +944,6 @@ class Workflow:
             for ln in f_in:
                 f_out.write(ln)
 
-    def clean_up(self, job_id, filtered=False):
-        """ Remove files that are meant to be temporary as per splitting
-        """
-        prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
-        input_lists = glob(f'{prefix}_*.lst')
-        stream_out = glob(f'{prefix}_*.stream')
-        slurm_out = glob(f'slurm-{job_id}_*.out')
-        file_items = input_lists + stream_out
-        if not self.diagnostic:
-            file_items += slurm_out
-        for item in file_items:
-            os.remove(item)
-
     def write_hit_list(self):
         """Write the total set of indexed frames into one 'hit list' file
         """
@@ -1175,8 +1165,6 @@ class Workflow:
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)
 
-        self.json_log.write_json()
-
 
     def check_late_entrance(self):
         """ Verify the presence of mandatory files from a previous session
@@ -1263,8 +1251,17 @@ class Workflow:
             self.res_lower, cell_keyword, filtered=False)
 
         if not os.path.exists(self.cell_file):
-            print('\n-----   TASK: determine initial unit cell and re-run '
-                  'CrystFEL   -----\n')
+            if self.silent:
+                print(
+                    '\n-----   No cell file in the silent mode - exit'
+                    ' the pipeline   -----\n'
+                )
+                return
+
+            print(
+                '\n-----   TASK: determine initial unit cell and re-run '
+                'CrystFEL   -----\n'
+            )
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
             cell_keyword = self.get_cell_keyword()
@@ -1296,6 +1293,11 @@ def main(argv=None):
         "-d", "--diagnostic",
         action='store_true',
         help="keep SLURM stdout captures for diagnoses in case of problems"
+    )
+    ap.add_argument(
+        "-s", "--silent",
+        action='store_true',
+        help="don't update SLURM progress bar and don't start cell_explorer"
     )
     ap.add_argument(
         "-r", "--reprocess",
@@ -1341,10 +1343,17 @@ def main(argv=None):
     workflow = Workflow(home_dir, work_dir, self_dir,
                         automatic=args.automatic,
                         diagnostic=args.diagnostic,
+                        silent=args.silent,
                         reprocess=args.reprocess,
                         use_peaks=args.peak_input,
                         use_cheetah=args.cheetah_input)
-    workflow.manage()
+    try:
+        workflow.manage()
+    except:
+        workflow.json_log.write_json()
+        raise
+    else:
+        workflow.json_log.write_json()
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
 

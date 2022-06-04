@@ -39,7 +39,7 @@ class WorkflowJsonLog:
         self.log['crystfel'] = {}
         self.log['crystfel']['version'] = self.xwiz.crystfel_version
 
-    def save_crystfel_job(self, job_name: str, folder: str):
+    def save_crystfel_job(self, job_name: str, folder: str, results: dict):
         crystfel_version = self.log['crystfel']['version']
         self.log['crystfel'][job_name] = job_log = {}
         job_log['geometry_file'] = osp.abspath(self.xwiz.geometry)
@@ -48,8 +48,9 @@ class WorkflowJsonLog:
             with open(f"{folder}/crystfel_harvest.json", 'r') as j_harv:
                 job_log['parameters'] = json.load(j_harv)
         else:
-            job_log['parameters'] = "?"
+            job_log['parameters'] = None
         job_log['cell_tolerance'] = self.xwiz.cell_tolerance
+        job_log['results'] = results
 
     def save_partialator(self):
         self.log['partialator'] = part_log = {}
@@ -61,7 +62,7 @@ class WorkflowJsonLog:
             part_log['split'] = self.xwiz.partialator_split_config
 
     def save_partialator_foms(self, partialator_foms: xr.DataArray) -> None:
-        """Store partialator foms as a json file in specified folder."""
+        """Store partialator foms to the json log."""
         self.log['results'] = foms_dict = {}
         for dataset in partialator_foms.coords['dataset'].values:
             foms_dict[dataset] = {}
