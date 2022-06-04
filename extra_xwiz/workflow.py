@@ -26,8 +26,8 @@ from . import summary as smr
 class Workflow:
 
     def __init__(self, home_dir, work_dir, self_dir, automatic=False,
-                 diagnostic=False, reprocess=False, use_peaks=False,
-                 use_cheetah=False):
+                 diagnostic=False, silent=False, reprocess=False,
+                 use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
@@ -36,6 +36,7 @@ class Workflow:
         self.self_dir = self_dir
         self.interactive = not automatic
         self.diagnostic = diagnostic
+        self.silent = silent
         self.reprocess = reprocess
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
@@ -338,10 +339,7 @@ class Workflow:
         )
         jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
         n_proc_frames = utl.wait_or_cancel(
-            job_id,
-            job_dir,
-            n_frames,
-            self.crystfel_version)
+            job_id, job_dir, n_frames, self.crystfel_version, self.silent)
         self.concat(job_dir, filtered)
 
         stream_file = f'{self.list_prefix}_hits.stream' if filtered \
@@ -1167,8 +1165,6 @@ class Workflow:
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)
 
-        self.json_log.write_json()
-
 
     def check_late_entrance(self):
         """ Verify the presence of mandatory files from a previous session
@@ -1255,8 +1251,17 @@ class Workflow:
             self.res_lower, cell_keyword, filtered=False)
 
         if not os.path.exists(self.cell_file):
-            print('\n-----   TASK: determine initial unit cell and re-run '
-                  'CrystFEL   -----\n')
+            if self.silent:
+                print(
+                    '\n-----   No cell file in the silent mode - exit'
+                    ' the pipeline   -----\n'
+                )
+                return
+
+            print(
+                '\n-----   TASK: determine initial unit cell and re-run '
+                'CrystFEL   -----\n'
+            )
             # fit cell remotely, do not yet filter, but re-run with that
             self.cell_explorer()
             cell_keyword = self.get_cell_keyword()
@@ -1288,6 +1293,11 @@ def main(argv=None):
         "-d", "--diagnostic",
         action='store_true',
         help="keep SLURM stdout captures for diagnoses in case of problems"
+    )
+    ap.add_argument(
+        "-s", "--silent",
+        action='store_true',
+        help="don't update SLURM progress bar and don't start cell_explorer"
     )
     ap.add_argument(
         "-r", "--reprocess",
@@ -1333,6 +1343,7 @@ def main(argv=None):
     workflow = Workflow(home_dir, work_dir, self_dir,
                         automatic=args.automatic,
                         diagnostic=args.diagnostic,
+                        silent=args.silent,
                         reprocess=args.reprocess,
                         use_peaks=args.peak_input,
                         use_cheetah=args.cheetah_input)
@@ -1341,6 +1352,8 @@ def main(argv=None):
     except:
         workflow.json_log.write_json()
         raise
+    else:
+        workflow.json_log.write_json()
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
 
