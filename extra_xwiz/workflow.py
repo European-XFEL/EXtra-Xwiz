@@ -14,6 +14,7 @@ import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
+from . import crystfel_utilities as cru
 from . import geometry as geo
 from . import json_log as jlog
 from . import partialator_split as pspl
@@ -343,15 +344,19 @@ class Workflow:
             self.crystfel_version)
         self.concat(job_dir, filtered)
 
-        self.json_log.save_crystfel_job(f"indexamajig_{self.step}", job_dir)
-
-        stream_file_name = f'{self.list_prefix}_hits.stream' if filtered \
+        stream_file = f'{self.list_prefix}_hits.stream' if filtered \
             else f'{self.list_prefix}.stream'
+        cryst_results = {}
+        cryst_results['n_frames'] = n_proc_frames
+        cryst_results['n_hits'] = cru.get_n_hits(stream_file, self.min_peaks)
+        cryst_results['n_crystals'] = cru.get_n_crystals(stream_file)
+
+        self.json_log.save_crystfel_job(
+            f"indexamajig_{self.step}", job_dir, cryst_results)
+
         smr.report_step_rate(
-            self.list_prefix, stream_file_name, self.step, res_limit,
-            n_proc_frames
-        )
-        # self.clean_up(job_id, filtered)
+            self.list_prefix, self.step, res_limit, cryst_results)
+
         if not self.diagnostic:
             utl.remove_path(job_dir)
         return n_proc_frames
@@ -941,19 +946,6 @@ class Workflow:
             for ln in f_in:
                 f_out.write(ln)
 
-    def clean_up(self, job_id, filtered=False):
-        """ Remove files that are meant to be temporary as per splitting
-        """
-        prefix = f'{self.list_prefix}_hits' if filtered else self.list_prefix
-        input_lists = glob(f'{prefix}_*.lst')
-        stream_out = glob(f'{prefix}_*.stream')
-        slurm_out = glob(f'slurm-{job_id}_*.out')
-        file_items = input_lists + stream_out
-        if not self.diagnostic:
-            file_items += slurm_out
-        for item in file_items:
-            os.remove(item)
-
     def write_hit_list(self):
         """Write the total set of indexed frames into one 'hit list' file
         """
@@ -1344,7 +1336,11 @@ def main(argv=None):
                         reprocess=args.reprocess,
                         use_peaks=args.peak_input,
                         use_cheetah=args.cheetah_input)
-    workflow.manage()
+    try:
+        workflow.manage()
+    except:
+        workflow.json_log.write_json()
+        raise
     print(48 * '~')
     print(f' Workflow complete.\n See: {workflow.list_prefix}.summary')
 
