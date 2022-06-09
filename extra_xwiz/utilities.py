@@ -4,6 +4,7 @@ from ast import Pass
 from getpass import getuser
 from glob import glob
 import h5py
+import json
 import numpy as np
 import re
 from scipy.optimize import curve_fit
@@ -577,6 +578,8 @@ def string_to_type(value: str, val_type: Type) -> Any:
         else:
             raise ValueError(
                 "Only 'True' or 'False' can be converted to boolean.")
+    if val_type == dict:
+        return json.loads(value.replace("\'", "\""))
     else:
         return val_type(value)
 
@@ -602,7 +605,7 @@ def user_input_str(
         Default value to return in case user does not provide the input
         or it does not match the regular expression.
     re_format : str, optional
-        Regular expresion to be matched, by default None.
+        Regular expression to be matched, by default None.
 
     Returns
     -------
@@ -611,7 +614,7 @@ def user_input_str(
             Whether an input from the user have been accepted.
         str
             An input from the user in case it satisfies the regular
-            expresion, otherwise the default value.
+            expression, otherwise the default value.
     """
     usr_inp = input(f'{message} [{default}] > ').strip()
     if usr_inp != '':

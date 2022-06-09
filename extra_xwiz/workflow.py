@@ -90,27 +90,23 @@ class Workflow:
         else:
             self.cxi_names = ['']
 
-        if 'n_frames_offset' in conf['data']:
-            self.n_frames_offset = utl.into_list(
-                conf['data']['n_frames_offset'])
-        # Check for deprecated parameter
-        elif 'frame_offset' in conf['data']:
-            warnings.warn(
-                "'frame_offset' is being deprecated, please use "
-                "'n_frames_offset' instead.")
-            self.n_frames_offset = utl.into_list(conf['data']['frame_offset'])
+        for depr_opt in ['frame_offset', 'n_frames_offset', 'n_frames_max']:
+            if depr_opt in conf['data']:
+                warnings.warn(
+                    f"'{depr_opt}' is deprecated, please use 'n_frames_range'"
+                    f" and rerun."
+                )
+                exit()
+        if 'n_frames_range' in conf['data']:
+            self.n_frames_range = utl.into_list(
+                conf['data']['n_frames_range'])
         else:
-            self.n_frames_offset = 0
+            self.n_frames_range = [{'start': 0, 'end': -1, 'step': 1}]
         if 'n_frames_percent' in conf['data']:
             self.n_frames_percent = utl.into_list(
                 conf['data']['n_frames_percent'])
         else:
-            self.n_frames_percent = 100
-        if 'n_frames_max' in conf['data']:
-            self.n_frames_max = utl.into_list(
-                conf['data']['n_frames_max'])
-        else:
-            self.n_frames_max = -1
+            self.n_frames_percent = [100]
         if 'n_frames_total' in conf['data']:
             self.n_frames_total = conf['data']['n_frames_total']
         # Check for deprecated parameter

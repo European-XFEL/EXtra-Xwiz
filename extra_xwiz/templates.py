@@ -57,10 +57,11 @@ ADV_CONFIG = """\
 [data]
 proposal = 700000
 runs = [30]
-n_frames_offset = 0
-n_frames_max = -1
-n_frames_percent = 100
-n_frames_total = 100000
+#n_frames_offset = 0
+#n_frames_max = -1
+frames_range = {start = 0, end = -1, step = 1}
+#n_frames_percent = 100
+#n_frames_total = 100000
 vds_names = ["xmpl_30_vds.cxi"]
 cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
