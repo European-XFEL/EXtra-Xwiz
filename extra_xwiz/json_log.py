@@ -30,10 +30,7 @@ class WorkflowJsonLog:
         self.log['data'] = {}
         self.log['data']['proposal'] = self.xwiz.data_proposal
         self.log['data']['runs'] = self.xwiz.data_runs
-        self.log['data']['n_frames_offset'] = self.xwiz.n_frames_offset
-        self.log['data']['n_frames_max'] = self.xwiz.n_frames_max
-        self.log['data']['n_frames_percent'] = self.xwiz.n_frames_percent
-        self.log['data']['n_frames_total'] = self.xwiz.n_frames_total
+        self.log['data']['frames_range'] = self.xwiz.frames_range
 
     def save_crystfel_ver(self):
         self.log['crystfel'] = {}

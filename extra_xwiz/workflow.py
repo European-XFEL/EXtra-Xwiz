@@ -23,6 +23,8 @@ from . import utilities as utl
 from . import summary as smr
 
 
+frames_range_default = {'start': 0, 'end': -1, 'step': 1}
+
 class Workflow:
 
     def __init__(self, home_dir, work_dir, self_dir, automatic=False,
@@ -70,6 +72,7 @@ class Workflow:
             ]
         else:
             self.data_runs = utl.into_list(conf['data']['runs'])
+        self.n_runs = len(self.data_runs)
         self.set_data_runs_paths()
 
         # 'vds_names' as a string with coma-separated values is deprecated
@@ -90,33 +93,25 @@ class Workflow:
         else:
             self.cxi_names = ['']
 
-        for depr_opt in ['frame_offset', 'n_frames_offset', 'n_frames_max']:
+        deprecated_data_opt = [
+            'frame_offset', 'n_frames_offset', 'n_frames_max',
+            'n_frames_percent', 'n_frames', 'n_frames_total'
+        ]
+        for depr_opt in deprecated_data_opt:
             if depr_opt in conf['data']:
                 warnings.warn(
-                    f"'{depr_opt}' is deprecated, please use 'n_frames_range'"
+                    f"'{depr_opt}' is deprecated, please use 'frames_range'"
                     f" and rerun."
                 )
                 exit()
-        if 'n_frames_range' in conf['data']:
-            self.n_frames_range = utl.into_list(
-                conf['data']['n_frames_range'])
+        if 'frames_range' in conf['data']:
+            self.frames_range = utl.into_list(conf['data']['frames_range'])
         else:
-            self.n_frames_range = [{'start': 0, 'end': -1, 'step': 1}]
-        if 'n_frames_percent' in conf['data']:
-            self.n_frames_percent = utl.into_list(
-                conf['data']['n_frames_percent'])
-        else:
-            self.n_frames_percent = [100]
-        if 'n_frames_total' in conf['data']:
-            self.n_frames_total = conf['data']['n_frames_total']
-        # Check for deprecated parameter
-        elif 'n_frames' in conf['data']:
-            warnings.warn(
-                "'n_frames' is being deprecated, please use "
-                "'n_frames_total' instead.")
-            self.n_frames_total = conf['data']['n_frames']
-        else:
-            self.n_frames_total = -1
+            self.frames_range = [{}] * len(self.data_runs)
+        self.frames_range = utl.dict_list_broadcast(
+            self.frames_range, self.n_runs)
+        self.frames_range = utl.dict_list_update_default(
+            self.frames_range, frames_range_default)
 
         self.list_prefix = conf['data']['list_prefix']
 
@@ -191,7 +186,8 @@ class Workflow:
         self.max_adu = conf['merging']['max_adu']
         self.config = conf      # store the config dictionary to report later
         self.overrides = {}     # collect optional config overrides
-        self.hit_list = []
+        self.frames_list = []
+        self.hits_list = []
         self.cell_ensemble = []
         self.cell_info = []
         self.step = 0
@@ -327,7 +323,7 @@ class Workflow:
         n_nodes = self.n_nodes_hits if filtered else self.n_nodes_all
         job_duration = self.duration_hits if filtered else self.duration_all
 
-        n_frames = len(self.hit_list) if filtered else self.n_frames_total
+        n_frames = len(self.hits_list) if filtered else len(self.frames_list)
 
         job_id = self.process_slurm_multi(
             job_dir, res_limit, cell_keyword, n_nodes, job_duration,
@@ -518,39 +514,17 @@ class Workflow:
     def verify_data_config_n_frames(self):
         """Verify parameters related to the number of frames to be
         processed in the interactive mode."""
-        n_data_files = len(self.exp_ids)
-
-        accepted, self.n_frames_offset = utl.user_input_list(
-            "Frames offset in each datafile", self.n_frames_offset,
-            val_type = int, n_elements = n_data_files, broadcastable = True
+        accepted, self.frames_range = utl.user_input_list(
+            "Frames range in each data file", self.frames_range,
+            val_type = dict, n_elements = self.n_runs, broadcastable = True
         )
         if accepted:
+            self.frames_range = utl.dict_list_broadcast(
+                self.frames_range, self.n_runs)
+            self.frames_range = utl.dict_list_update_default(
+                self.frames_range, frames_range_default)
             utl.set_dotdict_val(
-                self.overrides, "data.n_frames_offset", self.n_frames_offset)
-
-        accepted, self.n_frames_max = utl.user_input_list(
-            "Maximum frames per datafile", self.n_frames_max,
-            val_type = int, n_elements = n_data_files, broadcastable = True
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "data.n_frames_max", self.n_frames_max)
-
-        accepted, self.n_frames_percent = utl.user_input_list(
-            "Percent of frames to process", self.n_frames_percent,
-            val_type = int, n_elements = n_data_files, broadcastable = True
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "data.n_frames_percent", self.n_frames_percent)
-
-        accepted, self.n_frames_total = utl.user_input_type(
-            "Total maximum number of frames to process", self.n_frames_total,
-            val_type = int
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "data.n_frames_total", self.n_frames_total)
+                self.overrides, "data.frames_range", self.frames_range)
 
     def verify_geom_config(self):
         """Verify geometry file parameters in the interactive mode."""
@@ -604,33 +578,14 @@ class Workflow:
             utl.set_dotdict_val(
                 self.overrides, "slurm.duration_all", self.duration_all)
 
-    def verify_slurm_config_hits(self):
-        """Verify slurm parameters in the interactive mode for the
-        CrystFEL refine run."""
-        accepted, self.n_nodes_hits = utl.user_input_type(
-            "Number of nodes", self.n_nodes_hits,
-            val_type = int
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "slurm.n_nodes_hits", self.n_nodes_hits)
-
-        accepted, self.duration_hits = utl.user_input_str(
-            "SLURM jobs maximum duration", self.duration_hits,
-            re_format = r'\d{1,2}:\d{2}:\d{2}'
-        )
-        if accepted:
-            utl.set_dotdict_val(
-                self.overrides, "slurm.duration_hits", self.duration_hits)
 
     def verify_indexamajig_config_all(self):
         """Verify CrystFEL parameters in the interactive mode for the
         coarse run."""
         cri_keys_str = " / ".join(cri.crystfel_info.keys())
-        cri_keys_re = utl.list_to_re(cri.crystfel_info.keys())
-        accepted, self.crystfel_version = utl.user_input_str(
+        accepted, self.crystfel_version = utl.user_input_choice(
             f"CrystFEL version ({cri_keys_str})", self.crystfel_version,
-            cri_keys_re
+            cri.crystfel_info.keys()
         )
         if accepted:
             utl.set_dotdict_val(
@@ -769,7 +724,7 @@ class Workflow:
     def verify_run_proc_fine(self):
         """Verify whether to perform second run of indexamajig."""
         accepted, self.run_proc_fine = utl.user_input_type(
-            "Would you like to perform second run of indexamajig?",
+            "Would you like to perform a second run of indexamajig?",
             self.run_proc_fine, val_type = bool
         )
         if accepted:
@@ -793,10 +748,9 @@ class Workflow:
     def verify_merging_config(self):
         """Verify reflections merging parameters in the interactive
         mode."""
-        point_groups_re = utl.list_to_re(tmp.POINT_GROUPS)
-        accepted, self.point_group = utl.user_input_str(
+        accepted, self.point_group = utl.user_input_choice(
             "Reflections merging symmetry point group", self.point_group,
-            re_format = point_groups_re
+            tmp.POINT_GROUPS
         )
         if accepted:
             utl.set_dotdict_val(
@@ -833,56 +787,27 @@ class Workflow:
         """
         print('\n-----   TASK: prepare distributed computing   -----\n')
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
-        n_data_files = len(self.exp_ids)
-
-        # Total number of frames in the datafiles
-        nfr_raw = [self.exp_ids[i].shape[0] for i in range(n_data_files)]
-        nfr_raw = np.array(nfr_raw)
-
-        # Subtract offset
-        nfr_offset = np.broadcast_to(self.n_frames_offset, nfr_raw.shape).copy()
-        if any(nfr_offset < 0):
-            warnings.warn("n_frames_offset is forced to be >= 0.")
-            nfr_offset[nfr_offset < 0] = 0
-        nfr_cut_offset = np.maximum(nfr_raw - nfr_offset, 0)
-
-        # Limit number of frames for each datafile
-        nfr_max = np.broadcast_to(self.n_frames_max, nfr_raw.shape).copy()
-        nfr_max[nfr_max < 0] = max(nfr_cut_offset)
-        nfr_cut_max = np.minimum(nfr_cut_offset, nfr_max)
-
-        # Take only specified percent of the frames
-        nfr_perc = np.broadcast_to(self.n_frames_percent, nfr_raw.shape).copy()
-        if any(nfr_perc < 0) or any(nfr_perc > 100):
-            warnings.warn("n_frames_percent is forced to be within [0, 100].")
-            nfr_perc[nfr_perc < 0] = 0
-            nfr_perc[nfr_perc > 100] = 100
-        nfr_cut_perc = (nfr_cut_max * nfr_perc/100).astype(int)
-
-        # Select frames only up to n_frames_total
-        nfr_cut_total = nfr_cut_perc.copy()
-        sumfr_cut_total = sum(nfr_cut_total)
-        if self.n_frames_total >= 0 and self.n_frames_total < sumfr_cut_total:
-            nfr_left = self.n_frames_total
-            for ids in range(n_data_files):
-                if nfr_left > nfr_cut_total[ids]:
-                    nfr_left -= nfr_cut_total[ids]
-                else:
-                    nfr_cut_total[ids] = nfr_left
-                    nfr_cut_total[ids+1:] = 0
-                    break
-        else:
-            self.n_frames_total = sumfr_cut_total
-        print("Total number of frames to process:", sum(nfr_cut_total))
 
         # Make a list of datasets and frame indices
-        frames_lst = list()
-        for ids in range(n_data_files):
-            for ifr in range(nfr_cut_total[ids]):
-                frames_lst.append(f'{ds_names[ids]} //{ifr+nfr_offset[ids]}\n')
+        self.frames_list = []
+        for ids in range(self.n_runs):
+            n_frames_raw = self.exp_ids[ids].shape[0]
+            n_start = self.frames_range[ids]['start']
+            n_end = self.frames_range[ids]['end']
+            n_step = self.frames_range[ids]['step']
+            if n_end >= n_frames_raw:
+                warnings.warn(
+                    f"For run {self.data_runs[ids]} requested maximum frame"
+                    f" index {n_end} higher than available {n_frames_raw-1}.")
+                n_end = n_frames_raw - 1
+            elif n_end < 0:
+                n_end = n_frames_raw + n_end
+            for ifr in range(n_start, (n_end + 1), n_step):
+                self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
+        print("Total number of frames to process:", len(self.frames_list))
 
         # Split frames list per slurm node and write to files
-        frames_lst_split = np.array_split(frames_lst, self.n_nodes_all)
+        frames_lst_split = np.array_split(self.frames_list, self.n_nodes_all)
         print("Split into:", end='')
         for ich, sub_frames_lst in enumerate(frames_lst_split):
             print(f" {len(sub_frames_lst)}", end='')
@@ -903,7 +828,7 @@ class Workflow:
         print('average number of frames per file: {:.1f}'.format(average_n_frames))
         print('estimated total number of frames:',
               int(average_n_frames * n_files))
-        n_used_files = int(round(self.n_frames_total / average_n_frames))
+        n_used_files = int(round(len(self.frames_list) / average_n_frames))
         if n_used_files > n_files:
             warnings.warn('Number of used files from requested number of'
                           f' frames exceeds total, reset to {n_files}.')
@@ -921,13 +846,13 @@ class Workflow:
         """ Split up the list of indexed frames (also stored to one file) onto
             N chunks and write N temporary .lst files
         """
-        n_filtered = len(self.hit_list)
+        n_filtered = len(self.hits_list)
         split_indices = np.array_split(np.arange(n_filtered), self.n_nodes_hits)
         for chunk, sub_indices in enumerate(split_indices):
             print(len(sub_indices), end=' ')
             with open(f'{self.list_prefix}_hits_{chunk}.lst', 'w') as f:
                 for index in sub_indices:
-                    f.write(f'{self.hit_list[index]}\n')
+                    f.write(f'{self.hits_list[index]}\n')
         print()
 
     def concat(self, job_dir, filtered=False):
@@ -945,7 +870,7 @@ class Workflow:
         """
         list_file = self.list_prefix + '_hits.lst'
         with open(list_file, 'w') as f:
-            for hit_event in self.hit_list:
+            for hit_event in self.hits_list:
                 f.write(f'{hit_event}\n')
 
     def cell_explorer(self):
@@ -967,12 +892,12 @@ class Workflow:
     def fit_filtered_crystals(self):
         """Select diffraction frames from match vs. good cell
         """
-        self.hit_list, self.cell_ensemble = \
+        self.hits_list, self.cell_ensemble = \
             utl.get_crystal_frames(
                 f'{self.list_prefix}.stream', self.cell_file,
                 self.cell_tolerance
             )
-        n_cryst = len(self.hit_list)
+        n_cryst = len(self.hits_list)
         index_rate = 100.0 * n_cryst / self.n_proc_frames_all
         print(f"Overall indexing rate is {index_rate:5.2f} %")
         smr.report_cell_check(
@@ -1142,7 +1067,6 @@ class Workflow:
 
             # Verify SLURM nodes config for the second CrystFEL run:
             if self.interactive:
-                self.verify_slurm_config_hits()
                 self.verify_indexamajig_config_hits()
 
             self.distribute_hits()
@@ -1181,7 +1105,7 @@ class Workflow:
             print(f'Found {n_issues} issues. Make sure you have run a workflow'
                   ' for the present configuration before.)')
             exit()
-        self.hit_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
+        self.hits_list = open(f'{self.list_prefix}_hits.lst').read().splitlines()
 
 
     def manage(self):
