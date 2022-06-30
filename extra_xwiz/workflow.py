@@ -75,19 +75,25 @@ class Workflow:
         self.n_runs = len(self.data_runs)
         self.set_data_runs_paths()
 
-        # 'vds_names' as a string with coma-separated values is deprecated
-        if (isinstance(conf['data']['vds_names'], str)
-            and ',' in conf['data']['vds_names']):
-            warnings.warn(
-                "'vds_names' as a comma-separated string is being deprecated, "
-                "please use a list of strings instead."
-            )
-            self.vds_names = utl.string_to_list(conf['data']['vds_names'])
+        if 'vds_names' in conf['data']:
+            # 'vds_names' as a string with coma-separated values is deprecated
+            if (isinstance(conf['data']['vds_names'], str)
+                and ',' in conf['data']['vds_names']):
+                warnings.warn(
+                    "'vds_names' as a comma-separated string is being"
+                    " deprecated, please use a list of strings instead."
+                )
+                self.vds_names = utl.string_to_list(conf['data']['vds_names'])
+            else:
+                self.vds_names = utl.into_list(conf['data']['vds_names'])
+            if len(self.vds_names) != len(self.data_runs_paths):
+                print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
+                exit(0)
         else:
-            self.vds_names = utl.into_list(conf['data']['vds_names'])
-        if len(self.vds_names) != len(self.data_runs_paths):
-            print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
-            exit(0)
+            self.vds_names = []
+            for i_run in self.data_runs:
+                self.vds_names.append(
+                    f"p{self.data_proposal:06d}_r{i_run:04d}_vds.h5")
         if 'cxi_names' in conf['data']:
             self.cxi_names = utl.into_list(conf['data']['cxi_names'])
         else:
@@ -113,7 +119,14 @@ class Workflow:
         self.frames_range = utl.dict_list_update_default(
             self.frames_range, frames_range_default)
 
-        self.list_prefix = conf['data']['list_prefix']
+        if 'list_prefix' in conf['data']:
+            self.list_prefix = conf['data']['list_prefix']
+        else:
+            if len(self.data_runs) == 1:
+                st_runs = f"r{self.data_runs[0]:04d}"
+            else:
+                st_runs = f"r{self.data_runs[0]:04d}-{self.data_runs[-1]:04d}"
+            self.list_prefix = f"p{self.data_proposal:06d}_{st_runs}"
 
         self.crystfel_version = conf['crystfel']['version']
         if self.crystfel_version not in cri.crystfel_info.keys():
@@ -799,10 +812,10 @@ class Workflow:
                 warnings.warn(
                     f"For run {self.data_runs[ids]} requested maximum frame"
                     f" index {n_end} higher than available {n_frames_raw-1}.")
-                n_end = n_frames_raw - 1
+                n_end = n_frames_raw
             elif n_end < 0:
-                n_end = n_frames_raw + n_end
-            for ifr in range(n_start, (n_end + 1), n_step):
+                n_end = n_frames_raw + n_end + 1
+            for ifr in range(n_start, n_end, n_step):
                 self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
         print("Total number of frames to process:", len(self.frames_list))
 
