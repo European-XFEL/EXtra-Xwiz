@@ -41,7 +41,6 @@ class Workflow:
         self.use_peaks = use_peaks
         self.use_cheetah = use_cheetah
         self.cheetah_data_path = ''                        # for special cheetah tree
-        self.exp_ids = []
         conf = config.load_from_file()
 
         if 'proposal' in conf['data']:
@@ -71,6 +70,7 @@ class Workflow:
         else:
             self.data_runs = utl.into_list(conf['data']['runs'])
         self.set_data_runs_paths()
+        self.n_frames_per_vds = [0] * len(self.data_runs)
 
         # 'vds_names' as a string with coma-separated values is deprecated
         if (isinstance(conf['data']['vds_names'], str)
@@ -371,9 +371,9 @@ class Workflow:
                 warnings.warn(f' File {cxi_name} not found!')
                 exit(0)
             with h5py.File(cxi_name, 'r') as f:
-                self.exp_ids.append(np.array(f['entry_1/experiment_identifier'][()]))
+                self.n_frames_per_vds[i] = f['/entry_1/data_1/data'].shape[0]
             print(f'Data set {i:02d}: {cxi_name} '
-                  f'contains {self.exp_ids[i].shape[0]} frames in total.')
+                  f'contains {self.n_frames_per_vds[i]} frames in total.')
 
     def make_virtual(self):
         """ Make reference to original data in run folders, provide VDS for
@@ -400,9 +400,9 @@ class Workflow:
                 print(f'Requested VDS {vds_name} is present already.')
 
             with h5py.File(vds_name, 'r') as f:
-                self.exp_ids.append(np.array(f['entry_1/experiment_identifier'][()]))
+                self.n_frames_per_vds[i] = f['/entry_1/data_1/data'].shape[0]
             print(f'Data set {i:02d}: {vds_name} '
-                  f'contains {self.exp_ids[i].shape[0]} frames in total.')
+                  f'contains {self.n_frames_per_vds[i]} frames in total.')
 
     def transfer_geometry(self):
         """ Transfer corner x/y positions and fs/ss vectors onto a geometry
@@ -522,7 +522,7 @@ class Workflow:
     def verify_data_config_n_frames(self):
         """Verify parameters related to the number of frames to be
         processed in the interactive mode."""
-        n_data_files = len(self.exp_ids)
+        n_data_files = len(self.data_runs)
 
         accepted, self.n_frames_offset = utl.user_input_list(
             "Frames offset in each datafile", self.n_frames_offset,
@@ -837,10 +837,10 @@ class Workflow:
         """
         print('\n-----   TASK: prepare distributed computing   -----\n')
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
-        n_data_files = len(self.exp_ids)
+        n_data_files = len(self.data_runs)
 
         # Total number of frames in the datafiles
-        nfr_raw = [self.exp_ids[i].shape[0] for i in range(n_data_files)]
+        nfr_raw = self.n_frames_per_vds.copy()
         nfr_raw = np.array(nfr_raw)
 
         # Subtract offset
