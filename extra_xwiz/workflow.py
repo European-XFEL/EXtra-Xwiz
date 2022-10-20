@@ -193,10 +193,13 @@ class Workflow:
         else:
             self.run_partialator_split = False
 
-        self.point_group = conf['merging']['point_group']
-        self.scale_model = conf['merging']['scaling_model']
-        self.scale_iter = conf['merging']['scaling_iterations']
-        self.max_adu = conf['merging']['max_adu']
+        self.run_partialator = False
+        if 'merging' in conf:
+            self.run_partialator = True
+            self.point_group = conf['merging']['point_group']
+            self.scale_model = conf['merging']['scaling_model']
+            self.scale_iter = conf['merging']['scaling_iterations']
+            self.max_adu = conf['merging']['max_adu']
         self.config = conf      # store the config dictionary to report later
         self.overrides = {}     # collect optional config overrides
         self.frames_list = []
@@ -1090,8 +1093,12 @@ class Workflow:
             smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
             smr.report_cells(self.list_prefix, self.cell_info)
 
-        print('\n-----   TASK: scale/merge data and create statistics -----\n')
-        self.merge_bragg_obs()
+        if self.run_partialator:
+            print('\n-----   TASK: scale/merge data and create statistics -----\n')
+            self.merge_bragg_obs()
+        else:
+            print("\nOmitting 'partialator' step since there is no 'merging' "
+                  "part in the config file.\n")
 
         self.json_log.save_partialator()
 
