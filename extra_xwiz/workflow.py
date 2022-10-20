@@ -807,7 +807,7 @@ class Workflow:
         # Make a list of datasets and frame indices
         self.frames_list = []
         for ids in range(self.n_runs):
-            n_frames_raw = self.exp_ids[ids].shape[0]
+            n_frames_raw = self.n_frames_per_vds[ids]
             n_start = self.frames_range[ids]['start']
             n_end = self.frames_range[ids]['end']
             n_step = self.frames_range[ids]['step']
