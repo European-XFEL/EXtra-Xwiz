@@ -9,9 +9,7 @@ CONFIG = """\
 [data]
 proposal = 700000
 runs = [30]
-n_frames_total = 100000
-vds_names = ["xmpl_30_vds.cxi"]
-list_prefix = "xmpl_30"
+frames_range = {end = 100000}
 
 [crystfel]
 # Available versions: '0.8.0', '0.9.1', '0.10.1','cfel_dev'
@@ -57,11 +55,8 @@ ADV_CONFIG = """\
 [data]
 proposal = 700000
 runs = [30]
-n_frames_offset = 0
-n_frames_max = -1
-n_frames_percent = 100
-n_frames_total = 100000
-vds_names = ["xmpl_30_vds.cxi"]
+frames_range = {start = 0, end = -1, step = 1}
+vds_names = ["p700000_r0030_vds.h5"]
 cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
@@ -85,8 +80,8 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
-duration_hits = "0:30:00"
-n_nodes_hits = 4
+#duration_hits = "0:30:00"
+#n_nodes_hits = 4
 
 [proc_coarse]
 resolution = 4.0
