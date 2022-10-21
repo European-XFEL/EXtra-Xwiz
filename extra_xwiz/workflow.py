@@ -1096,11 +1096,10 @@ class Workflow:
         if self.run_partialator:
             print('\n-----   TASK: scale/merge data and create statistics -----\n')
             self.merge_bragg_obs()
+            self.json_log.save_partialator()
         else:
             print("\nOmitting 'partialator' step since there is no 'merging' "
                   "part in the config file.\n")
-
-        self.json_log.save_partialator()
 
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)
