@@ -144,8 +144,22 @@ class Workflow:
                 conf['geom']['add_hd5mask']
             )
 
+        if 'partition' in conf['slurm']:
+            self.partition = conf['slurm']['partition']
+        else:
+            self.partition = "none"
+        if 'reservation' in conf['slurm']:
+            self.reservation = conf['slurm']['reservation']
+        else:
+            self.reservation = "none"
+        if self.partition == "none" and self.reservation == "none":
+            warnings.warn(
+                "Please provide slurm 'partition' or 'reservation' in the "
+                "config file and rerun."
+            )
+            exit()
+
         self.n_nodes_all = conf['slurm']['n_nodes_all']
-        self.partition = conf['slurm']['partition']
         self.duration_all = conf['slurm']['duration_all']
         self.res_lower = conf['proc_coarse']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
@@ -318,8 +332,12 @@ class Workflow:
                     'EXTRA_OPTIONS': self.indexamajig_extra_options,
                     'HARVEST_OPTION': harvest_option
                 })
+        if self.reservation != "none":
+            partition_string = f"--reservation={self.reservation}"
+        else:
+            partition_string = f"--partition={self.partition}"
         slurm_args = ['sbatch',
-                      f'--partition={self.partition}',
+                      f'{partition_string}',
                       f'--time={job_duration}',
                       f'--array=0-{n_nodes-1}',
                       f'./{prefix}_proc-{self.step}.sh']
@@ -577,6 +595,13 @@ class Workflow:
         if accepted:
             utl.set_dotdict_val(
                 self.overrides, "slurm.partition", self.partition)
+
+        accepted, self.reservation = utl.user_input_str(
+            "SLURM reservation", self.reservation
+        )
+        if accepted:
+            utl.set_dotdict_val(
+                self.overrides, "slurm.reservation", self.reservation)
 
         accepted, self.n_nodes_all = utl.user_input_type(
             "Number of nodes", self.n_nodes_all,

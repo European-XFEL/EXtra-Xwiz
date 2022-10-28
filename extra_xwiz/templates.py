@@ -21,6 +21,8 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 [slurm]
 # Available partitions: 'all', 'upex', 'exfel'
 partition = "all"
+# In case you have slurm nodes reservation
+reservation = "none"
 duration_all = "1:00:00"
 n_nodes_all = 10
 
@@ -78,6 +80,8 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 [slurm]
 # Available partitions: 'all', 'upex', 'exfel'
 partition = "all"
+# In case you have slurm nodes reservation
+reservation = "none"
 duration_all = "1:00:00"
 n_nodes_all = 10
 #duration_hits = "0:30:00"
