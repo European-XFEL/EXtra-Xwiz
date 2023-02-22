@@ -12,7 +12,7 @@ runs = [30]
 frames_range = {end = 100000}
 
 [crystfel]
-# Available versions: '0.8.0', '0.9.1', '0.10.1','cfel_dev'
+# Available versions: '0.8.0', '0.9.1', '0.10.2', 'cfel_dev'
 version = 'cfel_dev'
 
 [geom]
@@ -63,7 +63,7 @@ cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
 [crystfel]
-# Available versions: '0.8.0', '0.9.1', '0.10.1', 'cfel_dev'
+# Available versions: '0.8.0', '0.9.1', '0.10.2', 'cfel_dev'
 version = 'cfel_dev'
 
 [geom]
