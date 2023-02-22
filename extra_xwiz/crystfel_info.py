@@ -29,19 +29,9 @@ crystfel_info = {
         'contain_harvest': False,
     },
 
-    '0.10.0': {
+    '0.10.2': {
         'import':
-            'module load maxwell crystfel/0.10.0',
-        'log_frames_pattern':
-            FRAMES_PATTERN_9,
-        'log_crystals_pattern':
-            CRYSTALS_PATTERN_8,
-        'contain_harvest': True,
-    },
-
-    '0.10.1': {
-        'import':
-            'module load maxwell crystfel/0.10.1',
+            'module load maxwell crystfel/0.10.2',
         'log_frames_pattern':
             FRAMES_PATTERN_9,
         'log_crystals_pattern':
