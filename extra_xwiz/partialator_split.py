@@ -35,7 +35,7 @@ def plot_adc_signal(
         Threshold (in arbitrary intensity units) to separate diode
         signal from the background.
     pulse_ids : np.ndarray
-        Array of pulse ids measured in the experiment.
+        Array of pulse peaks positions in the fastADC data.
     laser_align : int
         Shift between PP laser and X-ray pulses signals.
     laser_per_pulse : np.ndarray
@@ -152,7 +152,7 @@ def get_laser_state_from_diode(
         Folder to store the plot of fastADC data (if any).
     plot_tid : int, optional
         Train id to plot fastADC data. Can be an actual train id,
-        0 for the first train or -1 to avoid ploting, by default -1.
+        0 for the first train or -1 to avoid plotting, by default -1.
 
     Returns
     -------
@@ -164,7 +164,9 @@ def get_laser_state_from_diode(
     plot_tid = first_tid if plot_tid == 0 else plot_tid
 
     n_pulses = pulse_ids.shape[0]
-    laser_per_pulse_arr = np.zeros((len(data_run.train_ids), n_pulses))
+    # laser_per_pulse values: 0 -> 'off', 1 -> 'on', 2 -> 'unknown'
+    # By default 2 ('unknown')
+    laser_per_pulse_arr = np.full((len(data_run.train_ids), n_pulses), 2)
 
     data_select = data_run.select(
         [xray_signal_src, laser_signal_src]).trains(require_all=True)
@@ -188,12 +190,13 @@ def get_laser_state_from_diode(
             )
 
         n_pulses_curr = laser_per_pulse.shape[0]
-        assert n_pulses_curr == n_pulses, (
-            f"Found only {n_pulses_curr} pulses for train {train_id} "
-            f"while expected {n_pulses}.")
+        if n_pulses_curr == n_pulses:
+            laser_per_pulse_arr[(train_id-first_tid)] = laser_per_pulse
+        else:
+            warnings.warn(
+                f"Found only {n_pulses_curr} pulses for train {train_id} "
+                f"while expected {n_pulses}. Assigning frames to 'unknown'.")
 
-        laser_per_pulse_arr[(train_id-first_tid)] = laser_per_pulse
-        
     laser_per_train_pulse = xr.DataArray(
         laser_per_pulse_arr,
         coords=[data_run.train_ids, pulse_ids],
@@ -236,6 +239,8 @@ class DatasetSplitter:
             Data collection run number.
         vds_file : str
             VDS file with the detector data.
+        folder : str
+            Current working folder.
         split_config : dict
             Dictionary with the partialator split parameters.
         """
@@ -286,16 +291,16 @@ class DatasetSplitter:
         trains_pos_diff = np.ediff1d(trains_pos)
         n_pulses = round(np.median(trains_pos_diff))
 
-        trains_outliers_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
-        trains_outliers = self.frame_trains[trains_outliers_pos]
-        if trains_outliers.shape[0] != 0:
+        incomplete_trains_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
+        self.incomplete_trains = self.frame_trains[incomplete_trains_pos]
+        if self.incomplete_trains.shape[0] != 0:
             warnings.warn(
                 f"Expected {n_pulses} pulses in each train, but different "
                 f"n_pulses found for train(s) "
-                f"{', '.join([str(tid) for tid in trains_outliers])}.")
+                f"{', '.join([str(tid) for tid in self.incomplete_trains])}.")
 
         for train_pos in trains_pos:
-            if train_pos not in trains_outliers_pos:
+            if train_pos not in incomplete_trains_pos:
                 pulses_array = self.frame_pulses[train_pos:train_pos+n_pulses]
                 break
         else:
@@ -305,26 +310,36 @@ class DatasetSplitter:
 
         return pulses_array
 
+    def decode_state(self, train_id, pulse_id) -> str:
+        """Decode laser state from self.laser_state for specified
+        train_id and pulse_id."""
+        if (train_id not in self.incomplete_trains
+            and train_id in self.laser_state.trainId
+            and pulse_id in self.laser_state.pulseId):
+            curr_state = int(self.laser_state.loc[train_id, pulse_id])
+            return ['off', 'on', 'unknown'][curr_state]
+        else:
+            return 'unknown'
+
     def find_dataset(self, frame_id: int) -> str:
         """Estimate dataset name for the specified data frame id."""
         train_id = self.frame_trains[frame_id]
         pulse_id = self.frame_pulses[frame_id]
 
-        def decode_state() -> str:
-            curr_state = int(self.laser_state.loc[train_id, pulse_id])
-            return ['off', 'on'][curr_state]
-
         if self.mode == 'on_off':
-            dataset = decode_state()
+            dataset = self.decode_state(train_id, pulse_id)
         elif self.mode == 'on_off_numbered':
-            state_base = decode_state()
-            state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
-            state_change = np.where(np.roll(state_array,1)!=state_array)[0]
-            if state_change.shape[0] > 0:
-                state_num = state_array.shape[0] - state_change[-1]
+            state_base = self.decode_state(train_id, pulse_id)
+            if state_base in ['off', 'on']:
+                state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
+                state_change = np.where(np.roll(state_array,1)!=state_array)[0]
+                if state_change.shape[0] > 0:
+                    state_num = state_array.shape[0] - state_change[-1]
+                else:
+                    state_num = state_array.shape[0]
+                dataset = f'{state_base}_{state_num}'
             else:
-                state_num = state_array.shape[0]
-            dataset = f'{state_base}_{state_num}'
+                dataset = state_base
         elif self.mode == 'by_pulse_id':
             for cur_range in self.range_dataset:
                 if pulse_id >= cur_range[0] and pulse_id <= cur_range[1]:
@@ -341,6 +356,7 @@ class DatasetSplitter:
         """Compile a string with VDS file name, specified frame id and
         provided dataset name in the partialator list file format."""
         return f"{self.vds_file} //{frame_id} {dataset}"
+
 
     def get_split_list(self) -> list:
         """Compile a list of strings with VDS file name, frame id and
