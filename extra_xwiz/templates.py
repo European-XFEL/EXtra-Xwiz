@@ -126,10 +126,12 @@ integration_radii = "2,3,5"
 execute = false
 # Available modes: "on_off", "on_off_numbered", "by_pulse_id"
 mode = "on_off"
+
 # Required only for "on_off" or "on_off_numbered" modes:
 xray_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_0.output", "data.rawData"]
 laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
-plot_train = 0
+plot_signal = true
+
 # Required only for "by_pulse_id" mode:
 [partialator_split.pulse_datasets]
 # Current implementation:

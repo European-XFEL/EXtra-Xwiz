@@ -4,6 +4,7 @@ datasets depending on the laser state."""
 import json
 import h5py
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import multiprocessing as mproc
 import numpy as np
 import warnings
@@ -16,17 +17,13 @@ ALL_DATASET = "all_data"
 
 
 def plot_adc_signal(
-    train_id: int, xray_signal: np.ndarray, laser_signal: np.ndarray,
-    threshold: float, pulse_ids: np.ndarray, laser_align: int,
-    laser_per_pulse: np.ndarray, folder: str
-) -> None:
-    """Plot X-ray pulses and laser state signal and save it as
-    "adc_signal_tid_{train_id}.png"
+    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
+    pulse_ids: np.ndarray, laser_align: int, laser_per_pulse: np.ndarray
+) -> Figure:
+    """Prepare a figure with X-ray pulses and laser state signal.
 
     Parameters
     ----------
-    train_id : int
-        Train id of the data to be plotted.
     xray_signal : np.ndarray
         Array with X-ray pulses fastADC signal.
     laser_signal : np.ndarray
@@ -40,8 +37,11 @@ def plot_adc_signal(
         Shift between PP laser and X-ray pulses signals.
     laser_per_pulse : np.ndarray
         Boolean array with laser state per pulse peak.
-    folder : str
-        Folder to store the plot.
+
+    Returns
+    -------
+    Figure
+        Figure with fastADC data used to extract pumping laser state.
     """
     n_samples = xray_signal.shape[0]
     x = np.linspace(0, n_samples, n_samples, endpoint=False)
@@ -87,10 +87,7 @@ def plot_adc_signal(
     )
     axes[1].set_xlabel('ADC sample #')
 
-    fig.savefig(
-        f"{folder}/adc_signal_tid_{train_id}.png",
-        dpi=300, bbox_inches="tight"
-    )
+    return fig
 
 
 def get_adc_threshold(signal: np.ndarray) -> float:
@@ -129,7 +126,7 @@ def align_adc_signal(signal: np.ndarray, peak_ids: np.ndarray) -> int:
 
 def get_laser_state_from_diode(
     proposal: int, run: int, xray_signal_src: list, laser_signal_src: list,
-    pulse_ids: np.ndarray, folder: str, plot_tid: int=-1
+    pulse_ids: np.ndarray, folder: str=".", plot_signal: bool=False
 ) -> xr.DataArray:
     """Estimate PP laser state from the fastADC diode signal.
 
@@ -148,11 +145,10 @@ def get_laser_state_from_diode(
         format as 'xray_signal_src'.
     pulse_ids : np.ndarray
         Array of the pulse id values in the stored detector data.
-    folder : str
-        Folder to store the plot of fastADC data (if any).
-    plot_tid : int, optional
-        Train id to plot fastADC data. Can be an actual train id,
-        0 for the first train or -1 to avoid plotting, by default -1.
+    folder : str, optional
+        Folder to store plots of fastADC data (if any).
+    plot_signal : bool, optional
+        Whether to plot fastADC data for all unique laser patterns.
 
     Returns
     -------
@@ -161,12 +157,14 @@ def get_laser_state_from_diode(
     """
     data_run = open_run(proposal=proposal, run=run, data="all")
     first_tid = int(data_run.train_ids[0])
-    plot_tid = first_tid if plot_tid == 0 else plot_tid
 
     n_pulses = pulse_ids.shape[0]
     # laser_per_pulse values: 0 -> 'off', 1 -> 'on', 2 -> 'unknown'
     # By default 2 ('unknown')
     laser_per_pulse_arr = np.full((len(data_run.train_ids), n_pulses), 2)
+    # Dictionary with unique laser state patterns (in tuples) as keys
+    # and firs trains they appear in as values
+    laser_patterns = {}
 
     data_select = data_run.select(
         [xray_signal_src, laser_signal_src]).trains(require_all=True)
@@ -180,14 +178,31 @@ def get_laser_state_from_diode(
 
         pulse_pos = np.where(np.roll(pulses_thr,1)<pulses_thr)[0]
         align_val = align_adc_signal(laser_signal, pulse_pos)
-        laser_per_pulse = laser_thr[pulse_pos + align_val]
+        laser_per_pulse = laser_thr[pulse_pos + align_val].astype(int)
 
-        # Plot X-ray pulses and PP laser pattern
-        if train_id == plot_tid:
-            plot_adc_signal(
-                train_id, xray_signal, laser_signal, threshold, pulse_pos,
-                align_val, laser_per_pulse, folder
-            )
+        # Plot X-ray pulses and PP laser data for unique patterns
+        if plot_signal:
+            file_base = f"fastADC_p{proposal}_r{run:04d}_tid"
+            curr_laser_pattern = tuple(laser_per_pulse)
+            if curr_laser_pattern not in laser_patterns:
+                laser_patterns[curr_laser_pattern] = train_id
+                adc_figure = plot_adc_signal(
+                    xray_signal, laser_signal, threshold, pulse_pos,
+                    align_val, laser_per_pulse
+                )
+                adc_figure.savefig(
+                    f"{folder}/{file_base}{train_id}.png",
+                    dpi=300, bbox_inches="tight"
+                )
+                with open(f"{folder}/{file_base}{train_id}.txt", "w") as ftxt:
+                    ftxt.write(f"Laser pattern:\n")
+                    ftxt.write(f"    {curr_laser_pattern}\n")
+                    ftxt.write(f"Trains:\n")
+                    ftxt.write(f"    {train_id}\n")
+            else:
+                orig_tid = laser_patterns[curr_laser_pattern]
+                with open(f"{folder}/{file_base}{orig_tid}.txt", "a") as ftxt:
+                    ftxt.write(f"    {train_id}\n")
 
         n_pulses_curr = laser_per_pulse.shape[0]
         if n_pulses_curr == n_pulses:
@@ -255,12 +270,13 @@ class DatasetSplitter:
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
             self.laser_state = get_laser_state_from_diode(
-                proposal, run,
-                split_config['xray_signal'],
-                split_config['laser_signal'],
-                self.pulses_array,
-                self.folder,
-                split_config['plot_train'],
+                proposal=proposal,
+                run=run,
+                xray_signal_src=split_config['xray_signal'],
+                laser_signal_src=split_config['laser_signal'],
+                pulse_ids=self.pulses_array,
+                folder=self.folder,
+                plot_signal=split_config['plot_signal']
             )
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode == 'by_pulse_id':
