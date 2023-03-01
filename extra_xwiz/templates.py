@@ -132,9 +132,14 @@ laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
 plot_train = 0
 # Required only for "by_pulse_id" mode:
 [partialator_split.pulse_datasets]
+# Current implementation:
   my_1 = [0,4]
   my_2 = [12, 20]
   my_3 = [24, 48]
+# Idea for the new Implementation:
+#  my_on = {start=32, end=-1, step=32}
+#  my_off = [{start=40, step=32}, {start=48, step=32}, {start=56, step=32}]
+#  my_ignore = [0, 8, 16, 24]
 
 [merging]
 point_group = "422"
