@@ -124,6 +124,8 @@ integration_radii = "2,3,5"
 
 [partialator_split]
 execute = false
+# Set frames from these trains to dataset 'ignore':
+ignore_trains = []
 # Available modes: "on_off", "on_off_numbered", "by_pulse_id"
 mode = "on_off"
 
