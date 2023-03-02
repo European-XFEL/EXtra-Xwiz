@@ -2,8 +2,10 @@
 datasets depending on the laser state."""
 
 import json
+import os
 import h5py
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import multiprocessing as mproc
 import numpy as np
 import warnings
@@ -16,17 +18,13 @@ ALL_DATASET = "all_data"
 
 
 def plot_adc_signal(
-    train_id: int, xray_signal: np.ndarray, laser_signal: np.ndarray,
-    threshold: float, pulse_ids: np.ndarray, laser_align: int,
-    laser_per_pulse: np.ndarray, folder: str
-) -> None:
-    """Plot X-ray pulses and laser state signal and save it as
-    "adc_signal_tid_{train_id}.png"
+    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
+    pulse_ids: np.ndarray, laser_align: int, laser_per_pulse: np.ndarray
+) -> Figure:
+    """Prepare a figure with X-ray pulses and laser state signal.
 
     Parameters
     ----------
-    train_id : int
-        Train id of the data to be plotted.
     xray_signal : np.ndarray
         Array with X-ray pulses fastADC signal.
     laser_signal : np.ndarray
@@ -35,13 +33,16 @@ def plot_adc_signal(
         Threshold (in arbitrary intensity units) to separate diode
         signal from the background.
     pulse_ids : np.ndarray
-        Array of pulse ids measured in the experiment.
+        Array of pulse peaks positions in the fastADC data.
     laser_align : int
         Shift between PP laser and X-ray pulses signals.
     laser_per_pulse : np.ndarray
         Boolean array with laser state per pulse peak.
-    folder : str
-        Folder to store the plot.
+
+    Returns
+    -------
+    Figure
+        Figure with fastADC data used to extract pumping laser state.
     """
     n_samples = xray_signal.shape[0]
     x = np.linspace(0, n_samples, n_samples, endpoint=False)
@@ -87,10 +88,7 @@ def plot_adc_signal(
     )
     axes[1].set_xlabel('ADC sample #')
 
-    fig.savefig(
-        f"{folder}/adc_signal_tid_{train_id}.png",
-        dpi=300, bbox_inches="tight"
-    )
+    return fig
 
 
 def get_adc_threshold(signal: np.ndarray) -> float:
@@ -129,7 +127,7 @@ def align_adc_signal(signal: np.ndarray, peak_ids: np.ndarray) -> int:
 
 def get_laser_state_from_diode(
     proposal: int, run: int, xray_signal_src: list, laser_signal_src: list,
-    pulse_ids: np.ndarray, folder: str, plot_tid: int=-1
+    pulse_ids: np.ndarray, folder: str=".", plot_signal: bool=False
 ) -> xr.DataArray:
     """Estimate PP laser state from the fastADC diode signal.
 
@@ -148,11 +146,10 @@ def get_laser_state_from_diode(
         format as 'xray_signal_src'.
     pulse_ids : np.ndarray
         Array of the pulse id values in the stored detector data.
-    folder : str
-        Folder to store the plot of fastADC data (if any).
-    plot_tid : int, optional
-        Train id to plot fastADC data. Can be an actual train id,
-        0 for the first train or -1 to avoid ploting, by default -1.
+    folder : str, optional
+        Folder to store plots of fastADC data (if any).
+    plot_signal : bool, optional
+        Whether to plot fastADC data for all unique laser patterns.
 
     Returns
     -------
@@ -161,10 +158,14 @@ def get_laser_state_from_diode(
     """
     data_run = open_run(proposal=proposal, run=run, data="all")
     first_tid = int(data_run.train_ids[0])
-    plot_tid = first_tid if plot_tid == 0 else plot_tid
 
     n_pulses = pulse_ids.shape[0]
-    laser_per_pulse_arr = np.zeros((len(data_run.train_ids), n_pulses))
+    # laser_per_pulse values: 0 -> 'off', 1 -> 'on', 2 -> 'unknown'
+    # By default 2 ('unknown')
+    laser_per_pulse_arr = np.full((len(data_run.train_ids), n_pulses), 2)
+    # Dictionary with unique laser state patterns (in tuples) as keys
+    # and firs trains they appear in as values
+    laser_patterns = {}
 
     data_select = data_run.select(
         [xray_signal_src, laser_signal_src]).trains(require_all=True)
@@ -177,23 +178,48 @@ def get_laser_state_from_diode(
         laser_thr = np.array(laser_signal) > threshold
 
         pulse_pos = np.where(np.roll(pulses_thr,1)<pulses_thr)[0]
-        align_val = align_adc_signal(laser_signal, pulse_pos)
-        laser_per_pulse = laser_thr[pulse_pos + align_val]
+        try:
+            align_val = align_adc_signal(laser_signal, pulse_pos)
+        except ValueError:
+            print(
+                f"ValueError in align_adc_signal for p{proposal} r{run:04d} "
+                f"train {train_id}.")
+            raise
 
-        # Plot X-ray pulses and PP laser pattern
-        if train_id == plot_tid:
-            plot_adc_signal(
-                train_id, xray_signal, laser_signal, threshold, pulse_pos,
-                align_val, laser_per_pulse, folder
-            )
+        laser_per_pulse = laser_thr[pulse_pos + align_val].astype(int)
+
+        # Plot X-ray pulses and PP laser data for unique patterns
+        if plot_signal:
+            file_base = f"fastADC_p{proposal}_r{run:04d}_tid"
+            curr_laser_pattern = tuple(laser_per_pulse)
+            if curr_laser_pattern not in laser_patterns:
+                laser_patterns[curr_laser_pattern] = train_id
+                adc_figure = plot_adc_signal(
+                    xray_signal, laser_signal, threshold, pulse_pos,
+                    align_val, laser_per_pulse
+                )
+                adc_figure.savefig(
+                    f"{folder}/{file_base}{train_id}.png",
+                    dpi=300, bbox_inches="tight"
+                )
+                with open(f"{folder}/{file_base}{train_id}.txt", "w") as ftxt:
+                    ftxt.write(f"Laser pattern:\n")
+                    ftxt.write(f"    {curr_laser_pattern}\n")
+                    ftxt.write(f"Trains:\n")
+                    ftxt.write(f"    {train_id}\n")
+            else:
+                orig_tid = laser_patterns[curr_laser_pattern]
+                with open(f"{folder}/{file_base}{orig_tid}.txt", "a") as ftxt:
+                    ftxt.write(f"    {train_id}\n")
 
         n_pulses_curr = laser_per_pulse.shape[0]
-        assert n_pulses_curr == n_pulses, (
-            f"Found only {n_pulses_curr} pulses for train {train_id} "
-            f"while expected {n_pulses}.")
+        if n_pulses_curr == n_pulses:
+            laser_per_pulse_arr[(train_id-first_tid)] = laser_per_pulse
+        else:
+            warnings.warn(
+                f"Found only {n_pulses_curr} pulses for train {train_id} "
+                f"while expected {n_pulses}. Assigning frames to 'unknown'.")
 
-        laser_per_pulse_arr[(train_id-first_tid)] = laser_per_pulse
-        
     laser_per_train_pulse = xr.DataArray(
         laser_per_pulse_arr,
         coords=[data_run.train_ids, pulse_ids],
@@ -207,14 +233,18 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
     a netCDF file and, if state is the same for all trains, as a json
     file with a list of laser states per pulse."""
     laser_state.to_netcdf(f"{folder}/laser_per_train_pulse.nc")
-    pattern_mismatch = laser_state.data[1:] != laser_state.data[:-1]
+    # We can ignore raws where the state is unknown for the whole train
+    empty_train = np.full((1, laser_state.shape[1]), 2)
+    laser_state_cut = laser_state.where(laser_state != empty_train, drop=True)
+    n_good_trains = laser_state_cut.shape[0]
+    pattern_mismatch = laser_state_cut.data[1:] != laser_state_cut.data[:-1]
     n_mismatch = np.unique(np.where(pattern_mismatch)[0]).shape[0]
     if n_mismatch > 0:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
             f"convert into a single array.")
-    else:
-        pattern_lst = [int(val) for val in laser_state[0].data]
+    elif n_good_trains>0:
+        pattern_lst = [int(val) for val in laser_state_cut[0].data]
         with open(f"{folder}/laser_per_pulse.json", 'w') as j_file:
             json.dump(pattern_lst, j_file)
 
@@ -236,6 +266,8 @@ class DatasetSplitter:
             Data collection run number.
         vds_file : str
             VDS file with the detector data.
+        folder : str
+            Current working folder.
         split_config : dict
             Dictionary with the partialator split parameters.
         """
@@ -246,16 +278,20 @@ class DatasetSplitter:
             self.n_frames = self.frame_trains.shape[0]
         self.pulses_array = self.get_pulses_array()
 
+        if not os.path.exists(folder):
+            os.makedirs(folder)
         self.folder = folder
+
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
             self.laser_state = get_laser_state_from_diode(
-                proposal, run,
-                split_config['xray_signal'],
-                split_config['laser_signal'],
-                self.pulses_array,
-                self.folder,
-                split_config['plot_train'],
+                proposal=proposal,
+                run=run,
+                xray_signal_src=split_config['xray_signal'],
+                laser_signal_src=split_config['laser_signal'],
+                pulse_ids=self.pulses_array,
+                folder=self.folder,
+                plot_signal=split_config['plot_signal']
             )
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode == 'by_pulse_id':
@@ -286,16 +322,16 @@ class DatasetSplitter:
         trains_pos_diff = np.ediff1d(trains_pos)
         n_pulses = round(np.median(trains_pos_diff))
 
-        trains_outliers_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
-        trains_outliers = self.frame_trains[trains_outliers_pos]
-        if trains_outliers.shape[0] != 0:
+        incomplete_trains_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
+        self.incomplete_trains = self.frame_trains[incomplete_trains_pos]
+        if self.incomplete_trains.shape[0] != 0:
             warnings.warn(
                 f"Expected {n_pulses} pulses in each train, but different "
                 f"n_pulses found for train(s) "
-                f"{', '.join([str(tid) for tid in trains_outliers])}.")
+                f"{', '.join([str(tid) for tid in self.incomplete_trains])}.")
 
         for train_pos in trains_pos:
-            if train_pos not in trains_outliers_pos:
+            if train_pos not in incomplete_trains_pos:
                 pulses_array = self.frame_pulses[train_pos:train_pos+n_pulses]
                 break
         else:
@@ -305,26 +341,36 @@ class DatasetSplitter:
 
         return pulses_array
 
+    def decode_state(self, train_id, pulse_id) -> str:
+        """Decode laser state from self.laser_state for specified
+        train_id and pulse_id."""
+        if (train_id not in self.incomplete_trains
+            and train_id in self.laser_state.trainId
+            and pulse_id in self.laser_state.pulseId):
+            curr_state = int(self.laser_state.loc[train_id, pulse_id])
+            return ['off', 'on', 'unknown'][curr_state]
+        else:
+            return 'unknown'
+
     def find_dataset(self, frame_id: int) -> str:
         """Estimate dataset name for the specified data frame id."""
         train_id = self.frame_trains[frame_id]
         pulse_id = self.frame_pulses[frame_id]
 
-        def decode_state() -> str:
-            curr_state = int(self.laser_state.loc[train_id, pulse_id])
-            return ['off', 'on'][curr_state]
-
         if self.mode == 'on_off':
-            dataset = decode_state()
+            dataset = self.decode_state(train_id, pulse_id)
         elif self.mode == 'on_off_numbered':
-            state_base = decode_state()
-            state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
-            state_change = np.where(np.roll(state_array,1)!=state_array)[0]
-            if state_change.shape[0] > 0:
-                state_num = state_array.shape[0] - state_change[-1]
+            state_base = self.decode_state(train_id, pulse_id)
+            if state_base in ['off', 'on']:
+                state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
+                state_change = np.where(np.roll(state_array,1)!=state_array)[0]
+                if state_change.shape[0] > 0:
+                    state_num = state_array.shape[0] - state_change[-1]
+                else:
+                    state_num = state_array.shape[0]
+                dataset = f'{state_base}_{state_num}'
             else:
-                state_num = state_array.shape[0]
-            dataset = f'{state_base}_{state_num}'
+                dataset = state_base
         elif self.mode == 'by_pulse_id':
             for cur_range in self.range_dataset:
                 if pulse_id >= cur_range[0] and pulse_id <= cur_range[1]:
@@ -341,6 +387,7 @@ class DatasetSplitter:
         """Compile a string with VDS file name, specified frame id and
         provided dataset name in the partialator list file format."""
         return f"{self.vds_file} //{frame_id} {dataset}"
+
 
     def get_split_list(self) -> list:
         """Compile a list of strings with VDS file name, frame id and
