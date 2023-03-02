@@ -2,6 +2,7 @@
 datasets depending on the laser state."""
 
 import json
+import os
 import h5py
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -266,7 +267,10 @@ class DatasetSplitter:
             self.n_frames = self.frame_trains.shape[0]
         self.pulses_array = self.get_pulses_array()
 
+        if not os.path.exists(folder):
+            os.makedirs(folder)
         self.folder = folder
+
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
             self.laser_state = get_laser_state_from_diode(
