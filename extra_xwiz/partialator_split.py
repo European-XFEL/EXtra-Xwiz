@@ -226,14 +226,17 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
     a netCDF file and, if state is the same for all trains, as a json
     file with a list of laser states per pulse."""
     laser_state.to_netcdf(f"{folder}/laser_per_train_pulse.nc")
-    pattern_mismatch = laser_state.data[1:] != laser_state.data[:-1]
+    # We can ignore raws where the state is unknown for the whole train
+    empty_train = np.full((1, laser_state.shape[1]), 2)
+    laser_state_cut = laser_state.where(laser_state != empty_train, drop=True)
+    pattern_mismatch = laser_state_cut.data[1:] != laser_state_cut.data[:-1]
     n_mismatch = np.unique(np.where(pattern_mismatch)[0]).shape[0]
     if n_mismatch > 0:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
             f"convert into a single array.")
     else:
-        pattern_lst = [int(val) for val in laser_state[0].data]
+        pattern_lst = [int(val) for val in laser_state_cut[0].data]
         with open(f"{folder}/laser_per_pulse.json", 'w') as j_file:
             json.dump(pattern_lst, j_file)
 
