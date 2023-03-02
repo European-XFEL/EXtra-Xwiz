@@ -178,7 +178,14 @@ def get_laser_state_from_diode(
         laser_thr = np.array(laser_signal) > threshold
 
         pulse_pos = np.where(np.roll(pulses_thr,1)<pulses_thr)[0]
-        align_val = align_adc_signal(laser_signal, pulse_pos)
+        try:
+            align_val = align_adc_signal(laser_signal, pulse_pos)
+        except ValueError:
+            warnings.warn(
+                f"ValueError in align_adc_signal for p{proposal} r{run:04d} "
+                f"train {train_id} - setting align_val to 0.")
+            align_val = 0
+
         laser_per_pulse = laser_thr[pulse_pos + align_val].astype(int)
 
         # Plot X-ray pulses and PP laser data for unique patterns
