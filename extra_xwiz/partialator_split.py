@@ -181,10 +181,10 @@ def get_laser_state_from_diode(
         try:
             align_val = align_adc_signal(laser_signal, pulse_pos)
         except ValueError:
-            warnings.warn(
+            print(
                 f"ValueError in align_adc_signal for p{proposal} r{run:04d} "
-                f"train {train_id} - setting align_val to 0.")
-            align_val = 0
+                f"train {train_id}.")
+            raise
 
         laser_per_pulse = laser_thr[pulse_pos + align_val].astype(int)
 
@@ -236,13 +236,14 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
     # We can ignore raws where the state is unknown for the whole train
     empty_train = np.full((1, laser_state.shape[1]), 2)
     laser_state_cut = laser_state.where(laser_state != empty_train, drop=True)
+    n_good_trains = laser_state_cut.shape[0]
     pattern_mismatch = laser_state_cut.data[1:] != laser_state_cut.data[:-1]
     n_mismatch = np.unique(np.where(pattern_mismatch)[0]).shape[0]
     if n_mismatch > 0:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
             f"convert into a single array.")
-    else:
+    elif n_good_trains>0:
         pattern_lst = [int(val) for val in laser_state_cut[0].data]
         with open(f"{folder}/laser_per_pulse.json", 'w') as j_file:
             json.dump(pattern_lst, j_file)
