@@ -243,10 +243,13 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
             f"convert into a single array.")
-    elif n_good_trains>0:
+    elif n_good_trains > 0:
         pattern_lst = [int(val) for val in laser_state_cut[0].data]
         with open(f"{folder}/laser_per_pulse.json", 'w') as j_file:
             json.dump(pattern_lst, j_file)
+    else:
+        warnings.warn(
+            f"No good trains to store the laser pattern.")
 
 
 class DatasetSplitter:
