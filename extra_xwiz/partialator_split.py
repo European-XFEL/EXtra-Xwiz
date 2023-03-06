@@ -13,6 +13,7 @@ import xarray as xr
 
 from extra_data import open_run
 
+from extra_xwiz import utilities as utl
 
 ALL_DATASET = "all_data"
 
@@ -279,11 +280,17 @@ class DatasetSplitter:
             self.frame_trains = np.array(vds_f['/entry_1/trainId'])
             self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
             self.n_frames = self.frame_trains.shape[0]
+        self.trains_array = self.get_trains_array()
         self.pulses_array = self.get_pulses_array()
 
         if not os.path.exists(folder):
             os.makedirs(folder)
         self.folder = folder
+
+        if 'ignore_trains' in split_config:
+            self.ignore_trains = utl.into_list(split_config['ignore_trains'])
+        else:
+            self.ignore_trains = []
 
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
@@ -314,6 +321,11 @@ class DatasetSplitter:
                     self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
 
         self.all_datasets = set()
+
+    def get_trains_array(self) -> np.ndarray:
+        """Prepare an array with all train ids in the stored data."""
+        trains_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
+        return self.frame_trains[trains_pos]
 
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
@@ -347,12 +359,15 @@ class DatasetSplitter:
     def decode_state(self, train_id, pulse_id) -> str:
         """Decode laser state from self.laser_state for specified
         train_id and pulse_id."""
-        if (train_id not in self.incomplete_trains
-            and train_id in self.laser_state.trainId
+        if (train_id in self.ignore_trains
+            or train_id in self.incomplete_trains):
+            return 'ignore'
+        elif (train_id in self.laser_state.trainId
             and pulse_id in self.laser_state.pulseId):
             curr_state = int(self.laser_state.loc[train_id, pulse_id])
             return ['off', 'on', 'unknown'][curr_state]
         else:
+            # In case train-pulse not in the self.laser_state table
             return 'unknown'
 
     def find_dataset(self, frame_id: int) -> str:
