@@ -973,6 +973,9 @@ class Workflow:
 
         crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
 
+        # There is a link to the cell file in the partialator folder
+        _, _, partialator_cell = utl.separate_path(self.cell_file)
+
         for i_ds, dataset in enumerate(datasets):
             if dataset == pspl.ALL_DATASET:
                 ds_suffix = ""
@@ -987,7 +990,7 @@ class Workflow:
                     'PREFIX': self.list_prefix,
                     'DS_SUFFIX': ds_suffix,
                     'POINT_GROUP': self.point_group,
-                    'UNIT_CELL': self.cell_file,
+                    'UNIT_CELL': partialator_cell,
                     'HIGH_RES': self.res_higher
                 })
             out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
@@ -1002,7 +1005,7 @@ class Workflow:
                         'PREFIX': self.list_prefix,
                         'DS_SUFFIX': ds_suffix,
                         'POINT_GROUP': self.point_group,
-                        'UNIT_CELL': self.cell_file,
+                        'UNIT_CELL': partialator_cell,
                         'HIGH_RES': self.res_higher,
                         'FOM': foms_tag[i]
                     })
