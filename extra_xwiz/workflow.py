@@ -1065,7 +1065,8 @@ class Workflow:
             with open(f"{part_dir}/partialator_datasets.plst", 'w') as f_out:
                 f_out.write("\n".join(frame_datasets))
             part_split_arg = "--custom-split partialator_datasets.plst"
-            part_datasets = [pspl.ALL_DATASET] + sorted(splitter_datasets)
+            splitter_good_datasets = splitter_datasets - pspl.IGNORE_DATASETS
+            part_datasets = [pspl.ALL_DATASET] + sorted(splitter_good_datasets)
         else:
             part_split_arg = ""
             part_datasets = [pspl.ALL_DATASET]

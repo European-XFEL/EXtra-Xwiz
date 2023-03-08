@@ -16,7 +16,7 @@ from extra_data import open_run
 from extra_xwiz import utilities as utl
 
 ALL_DATASET = "all_data"
-
+IGNORE_DATASETS = {'unknown', 'ignore'}
 
 def plot_adc_signal(
     xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
