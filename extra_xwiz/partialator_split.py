@@ -253,6 +253,15 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
             f"No good trains to store the laser pattern.")
 
 
+def clear_datasets(frame_datasets):
+    """Copy frame_datasets strings list removing ignored datasets."""
+    dsets_clear = []
+    for dset in frame_datasets:
+        if dset.split()[2] not in IGNORE_DATASETS:
+            dsets_clear.append(dset)
+    return dsets_clear
+
+
 class DatasetSplitter:
 
     def __init__(

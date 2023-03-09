@@ -1065,9 +1065,13 @@ class Workflow:
                 )
                 frame_datasets.extend(splitter.get_split_list())
                 splitter_datasets |= splitter.all_datasets
-            with open(f"{part_dir}/partialator_datasets.plst", 'w') as f_out:
+            with open(f"{part_dir}/frame_datasets.plst", 'w') as f_out:
                 f_out.write("\n".join(frame_datasets))
-            part_split_arg = "--custom-split partialator_datasets.plst"
+
+            frame_datasets_clean = pspl.clear_datasets(frame_datasets)
+            with open(f"{part_dir}/frame_datasets_clean.plst", 'w') as f_out:
+                f_out.write("\n".join(frame_datasets_clean))
+            part_split_arg = "--custom-split frame_datasets_clean.plst"
             splitter_good_datasets = splitter_datasets - pspl.IGNORE_DATASETS
             part_datasets = [pspl.ALL_DATASET] + sorted(splitter_good_datasets)
         else:
