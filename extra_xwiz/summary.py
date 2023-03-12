@@ -111,6 +111,39 @@ def report_cells(prefix, cell_strings):
             f.write(string)
 
 
+def report_frame_counts(
+    frame_counts: xr.DataArray, prefix :str
+) -> None:
+    """Report overall frame counts per dataset."""
+    datasets = frame_counts.coords['dataset'].values
+    counts = frame_counts.coords['frame_count'].values
+    n_counts = len(counts)
+    frame_count_len = 0
+    for count in counts:
+        frame_count_len = max(frame_count_len, len(count))
+    max_ds_len = 12
+    for dset in datasets:
+        max_ds_len = max(max_ds_len, len(dset))
+    
+    counts_text = []
+    counts_text.append("\nOverall frame rates:")
+    counts_text.append(" "*frame_count_len)
+    for dset in datasets:
+        counts_text[-1] += f"{dset:>{max_ds_len}}"
+    for count in counts:
+        counts_text.append(f"{count:{frame_count_len}}")
+        for dset in datasets:
+            count_val = frame_counts.loc[dset, count].item()
+            if 'N_' in count:
+                counts_text[-1] += f"{int(count_val):{max_ds_len}d}"
+            else:
+                counts_text[-1] += f"{(count_val*100):{max_ds_len-1}.3f}%"
+
+    with open(f'{prefix}.summary', 'a') as f_sum:
+        for line in counts_text:
+            f_sum.write(line + "\n")
+
+
 def report_merging_metrics(
     partialator_foms: xr.DataArray, prefix :str
 ) -> None:
