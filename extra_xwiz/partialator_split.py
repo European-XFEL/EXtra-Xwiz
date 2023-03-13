@@ -287,7 +287,10 @@ class DatasetSplitter:
         self.vds_file = vds_file
         with h5py.File(self.vds_file, 'r') as vds_f:
             self.frame_trains = np.array(vds_f['/entry_1/trainId'])
-            self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
+            if '/entry_1/pulseId' in vds_f:
+                self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
+            else:
+                self.frame_pulses = np.array(vds_f['/entry_1/cellId'])
             self.n_frames = self.frame_trains.shape[0]
         self.trains_array = self.get_trains_array()
         self.pulses_array = self.get_pulses_array()
