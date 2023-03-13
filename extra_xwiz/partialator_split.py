@@ -13,9 +13,10 @@ import xarray as xr
 
 from extra_data import open_run
 
+from extra_xwiz import utilities as utl
 
 ALL_DATASET = "all_data"
-
+IGNORE_DATASETS = {'unknown', 'ignore'}
 
 def plot_adc_signal(
     xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
@@ -243,10 +244,22 @@ def store_laser_pattern(laser_state: xr.DataArray, folder: str) -> None:
         warnings.warn(
             f"Laser pattern mismatch for {n_mismatch} trains, could not "
             f"convert into a single array.")
-    elif n_good_trains>0:
+    elif n_good_trains > 0:
         pattern_lst = [int(val) for val in laser_state_cut[0].data]
         with open(f"{folder}/laser_per_pulse.json", 'w') as j_file:
             json.dump(pattern_lst, j_file)
+    else:
+        warnings.warn(
+            f"No good trains to store the laser pattern.")
+
+
+def clear_datasets(frame_datasets):
+    """Copy frame_datasets strings list removing ignored datasets."""
+    dsets_clear = []
+    for dset in frame_datasets:
+        if dset.split()[2] not in IGNORE_DATASETS:
+            dsets_clear.append(dset)
+    return dsets_clear
 
 
 class DatasetSplitter:
@@ -274,13 +287,22 @@ class DatasetSplitter:
         self.vds_file = vds_file
         with h5py.File(self.vds_file, 'r') as vds_f:
             self.frame_trains = np.array(vds_f['/entry_1/trainId'])
-            self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
+            if '/entry_1/pulseId' in vds_f:
+                self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
+            else:
+                self.frame_pulses = np.array(vds_f['/entry_1/cellId'])
             self.n_frames = self.frame_trains.shape[0]
+        self.trains_array = self.get_trains_array()
         self.pulses_array = self.get_pulses_array()
 
         if not os.path.exists(folder):
             os.makedirs(folder)
         self.folder = folder
+
+        if 'ignore_trains' in split_config:
+            self.ignore_trains = utl.into_list(split_config['ignore_trains'])
+        else:
+            self.ignore_trains = []
 
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
@@ -311,6 +333,11 @@ class DatasetSplitter:
                     self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
 
         self.all_datasets = set()
+
+    def get_trains_array(self) -> np.ndarray:
+        """Prepare an array with all train ids in the stored data."""
+        trains_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
+        return self.frame_trains[trains_pos]
 
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
@@ -344,12 +371,15 @@ class DatasetSplitter:
     def decode_state(self, train_id, pulse_id) -> str:
         """Decode laser state from self.laser_state for specified
         train_id and pulse_id."""
-        if (train_id not in self.incomplete_trains
-            and train_id in self.laser_state.trainId
+        if (train_id in self.ignore_trains
+            or train_id in self.incomplete_trains):
+            return 'ignore'
+        elif (train_id in self.laser_state.trainId
             and pulse_id in self.laser_state.pulseId):
             curr_state = int(self.laser_state.loc[train_id, pulse_id])
             return ['off', 'on', 'unknown'][curr_state]
         else:
+            # In case train-pulse not in the self.laser_state table
             return 'unknown'
 
     def find_dataset(self, frame_id: int) -> str:
