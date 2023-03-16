@@ -29,13 +29,12 @@ frames_range_default = {'start': 0, 'end': -1, 'step': 1}
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, self_dir, automatic=False,
+    def __init__(self, work_dir, self_dir, automatic=False,
                  diagnostic=False, silent=False, reprocess=False,
                  use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
-        self.home_dir = home_dir
         self.work_dir = work_dir
         self.self_dir = self_dir
         self.interactive = not automatic
@@ -1384,7 +1383,6 @@ def main(argv=None):
         help="Generate an advanced config instead of the base one."
     )
     args = ap.parse_args(argv)
-    home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
     self_dir = os.path.split(os.path.realpath(__file__))[0]
     if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
@@ -1401,7 +1399,7 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir, self_dir,
+    workflow = Workflow(work_dir, self_dir,
                         automatic=args.automatic,
                         diagnostic=args.diagnostic,
                         silent=args.silent,
