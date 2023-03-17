@@ -145,11 +145,7 @@ max_adu = 100000
 """
 
 MAKE_VDS = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
-
-module load exfel
-module load exfel_anaconda3/1.1
+#!/bin/bash
 
 extra-data-make-virtual-cxi \\
   %(DATA_PATH)s \\
