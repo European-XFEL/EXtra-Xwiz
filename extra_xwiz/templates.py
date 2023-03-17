@@ -254,8 +254,7 @@ echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
 
 PARTIALATOR_WRAP = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
+#!/bin/bash
 
 %(IMPORT_CRYSTFEL)s
 
@@ -270,8 +269,7 @@ partialator \\
 """
 
 CHECK_HKL_WRAP = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
+#!/bin/bash
 
 %(IMPORT_CRYSTFEL)s
 
@@ -284,8 +282,7 @@ check_hkl \\
 """
 
 COMPARE_HKL_WRAP = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
+#!/bin/bash
 
 %(IMPORT_CRYSTFEL)s
 
@@ -300,8 +297,7 @@ compare_hkl \\
 """
 
 CELL_EXPLORER_WRAP = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
+#!/bin/bash
 
 %(IMPORT_CRYSTFEL)s
 
@@ -309,8 +305,7 @@ cell_explorer %(PREFIX)s.stream
 """
 
 HDFSEE_WRAP = """\
-#!/bin/sh
-source /usr/share/Modules/init/sh
+#!/bin/bash
 
 %(IMPORT_CRYSTFEL)s
 
