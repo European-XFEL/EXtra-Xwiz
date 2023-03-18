@@ -178,7 +178,7 @@ def wait_or_cancel(
     else:
         job_type = 'job-array'
         logs_name = f'slurm-{job_id}_*.out'
-    print(f' Waiting for {job_type} {job_id}')
+    print(f' Waiting for the {job_type} {job_id}')
     while True:
         if is_local:
             if not psutil.pid_exists(int(job_id)):

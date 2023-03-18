@@ -145,7 +145,7 @@ max_adu = 100000
 """
 
 MAKE_VDS = """\
-#!/bin/bash
+#!/bin/sh
 
 extra-data-make-virtual-cxi \\
   %(DATA_PATH)s \\
@@ -173,7 +173,7 @@ indexamajig --version
 echo ""
 N_CORES_USE=%(CORES)s
 N_CORES_AVAL="$(nproc)"
-if [[ $N_CORES_USE -lt 0 ]]
+if [ $N_CORES_USE -lt 0 ]
 then
   N_CORES_USE=$N_CORES_AVAL
 fi
@@ -210,7 +210,7 @@ echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 
 
 PROC_VDS_BASH_LOCAL = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
@@ -220,7 +220,7 @@ indexamajig --version
 echo ""
 N_CORES_USE=%(CORES)s
 N_CORES_AVAL="$(nproc)"
-if [[ $N_CORES_USE -lt 0 ]]
+if [ $N_CORES_USE -lt 0 ]
 then
   N_CORES_USE=$N_CORES_AVAL
 fi
@@ -269,7 +269,7 @@ indexamajig --version
 echo ""
 N_CORES_USE=%(CORES)s
 N_CORES_AVAL="$(nproc)"
-if [[ $N_CORES_USE -lt 0 ]]
+if [ $N_CORES_USE -lt 0 ]
 then
   N_CORES_USE=$N_CORES_AVAL
 fi
@@ -298,7 +298,7 @@ echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
 
 PARTIALATOR_WRAP = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
@@ -313,7 +313,7 @@ partialator \\
 """
 
 CHECK_HKL_WRAP = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
@@ -326,7 +326,7 @@ check_hkl \\
 """
 
 COMPARE_HKL_WRAP = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
@@ -341,7 +341,7 @@ compare_hkl \\
 """
 
 CELL_EXPLORER_WRAP = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
@@ -349,7 +349,7 @@ cell_explorer %(PREFIX)s.stream
 """
 
 HDFSEE_WRAP = """\
-#!/bin/bash
+#!/bin/sh
 
 %(IMPORT_CRYSTFEL)s
 
