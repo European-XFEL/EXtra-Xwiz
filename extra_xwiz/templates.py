@@ -19,7 +19,7 @@ version = 'cfel_dev'
 file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform.geom"
 
 [slurm]
-# Available partitions: 'all', 'upex', 'exfel'
+# Available partitions: 'local', 'all', 'upex', 'exfel'
 partition = "all"
 # In case you have slurm nodes reservation
 reservation = "none"
@@ -78,7 +78,7 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
   output = "geometry/jungfrau_p2696_v2_vds.geom"
 
 [slurm]
-# Available partitions: 'all', 'upex', 'exfel'
+# Available partitions: 'local', 'all', 'upex', 'exfel'
 partition = "all"
 # In case you have slurm nodes reservation
 reservation = "none"
@@ -204,8 +204,51 @@ indexamajig \\
   --min-peaks=%(MIN_PEAKS)s \\
 %(COPY_FIELDS)s  %(EXTRA_OPTIONS)s $HARVEST_OPT
 
+echo ""
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
+
+
+PROC_VDS_BASH_LOCAL = """\
+#!/bin/bash
+
+%(IMPORT_CRYSTFEL)s
+
+echo "LOG: start on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
+echo ""
+indexamajig --version
+echo ""
+N_CORES_USE=%(CORES)s
+N_CORES_AVAL="$(nproc)"
+if [[ $N_CORES_USE -lt 0 ]]
+then
+  N_CORES_USE=$N_CORES_AVAL
+fi
+echo "LOG: Using $N_CORES_USE out of $N_CORES_AVAL available cores."
+echo ""
+
+indexamajig \\
+  -i %(PREFIX)s_0.lst \\
+  -o %(PREFIX)s_0.stream \\
+  -g %(GEOM)s %(CRYSTAL)s \\
+  -j $N_CORES_USE \\
+  --highres=%(RESOLUTION)s \\
+  --peaks=%(PEAK_METHOD)s \\
+  --min-snr=%(PEAK_SNR)s \\
+  --threshold=%(PEAK_THRESHOLD)s \\
+  --min-pix-count=%(PEAK_MIN_PX)s \\
+  --max-pix-count=%(PEAK_MAX_PX)s \\
+  --indexing=%(INDEX_METHOD)s \\
+  --int-radius=%(INT_RADII)s \\
+  --local-bg-radius=%(LOCAL_BG_RADIUS)s \\
+  --max-res=%(MAX_RES)s \\
+  --min-peaks=%(MIN_PEAKS)s \\
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s %(HARVEST_OPTION)s
+
+echo ""
+echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
+"""
+
 
 PROC_CXI_BASH_SLURM = """\
 #!/bin/sh
@@ -250,6 +293,7 @@ indexamajig \\
   --indexing=%(INDEX_METHOD)s \\
 %(COPY_FIELDS)s  %(EXTRA_OPTIONS)s $HARVEST_OPT
 
+echo ""
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
 

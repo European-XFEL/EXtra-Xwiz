@@ -160,8 +160,12 @@ class Workflow:
             )
             exit()
 
-        self.n_nodes_all = conf['slurm']['n_nodes_all']
-        self.duration_all = conf['slurm']['duration_all']
+        if self.partition == 'local':
+            self.n_nodes_all = 1
+            self.duration_all = "72:00:00"
+        else:
+            self.n_nodes_all = conf['slurm']['n_nodes_all']
+            self.duration_all = conf['slurm']['duration_all']
         self.res_lower = conf['proc_coarse']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
@@ -195,8 +199,14 @@ class Workflow:
                 'frame_filter', {}).get('match_tolerance')
         else:
             self.run_proc_fine = True
-            self.n_nodes_hits = conf['slurm']['n_nodes_hits']
-            self.duration_hits = conf['slurm']['duration_hits']
+            if self.partition == 'local':
+                self.n_nodes_hits = 1
+                self.duration_hits = "72:00:00"
+            else:
+                self.n_nodes_hits = conf['slurm'].get(
+                    'n_nodes_hits', self.n_nodes_all)
+                self.duration_hits = conf['slurm'].get(
+                    'duration_hits', self.duration_all)
             self.cell_tolerance = conf['frame_filter']['match_tolerance']
             self.res_higher = conf['proc_fine']['resolution']
 
@@ -297,6 +307,8 @@ class Workflow:
 
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
+                if self.partition == 'local':
+                    raise NotImplementedError
                 f.write(tmp.PROC_CXI_BASH_SLURM % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
@@ -312,7 +324,11 @@ class Workflow:
                     'HARVEST_OPTION': harvest_option
                 })
             else:
-                f.write(tmp.PROC_VDS_BASH_SLURM % {
+                if self.partition == 'local':
+                    proc_template = tmp.PROC_VDS_BASH_LOCAL
+                else:
+                    proc_template = tmp.PROC_VDS_BASH_SLURM
+                f.write( proc_template % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
                     'GEOM': geom_keyword,
@@ -333,17 +349,28 @@ class Workflow:
                     'EXTRA_OPTIONS': self.indexamajig_extra_options,
                     'HARVEST_OPTION': harvest_option
                 })
-        if self.reservation != "none":
-            partition_string = f"--reservation={self.reservation}"
+        if self.partition == 'local':
+            with open(f'{job_dir}/local_0.out', 'w') as flog:
+                p = subprocess.Popen(
+                    ['sh', f'{prefix}_proc-{self.step}.sh'],
+                    stdin=subprocess.DEVNULL,
+                    stdout=flog, stderr=flog,
+                    cwd=job_dir, start_new_session=True
+                )
+                proc_out = str(p.pid)
         else:
-            partition_string = f"--partition={self.partition}"
-        slurm_args = ['sbatch',
-                      f'{partition_string}',
-                      f'--time={job_duration}',
-                      f'--array=0-{n_nodes-1}',
-                      f'./{prefix}_proc-{self.step}.sh']
-        proc_out = subprocess.check_output(slurm_args, cwd=job_dir)
-        return proc_out.decode('utf-8').split()[-1]    # job id
+            if self.reservation != "none":
+                partition_string = f"--reservation={self.reservation}"
+            else:
+                partition_string = f"--partition={self.partition}"
+            slurm_args = ['sbatch',
+                            f'{partition_string}',
+                            f'--time={job_duration}',
+                            f'--array=0-{n_nodes-1}',
+                            f'./{prefix}_proc-{self.step}.sh']
+            proc_obj = subprocess.check_output(slurm_args, cwd=job_dir)
+            proc_out = proc_obj.decode('utf-8').split()[-1]    # job id
+        return proc_out
 
     def wrap_process(self, res_limit, cell_keyword, filtered=False):
         """ Perform the processing as distributed computation job;
@@ -365,8 +392,11 @@ class Workflow:
             filtered=filtered
         )
         jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
+        is_local = self.partition == 'local'
         n_proc_frames = utl.wait_or_cancel(
-            job_id, job_dir, n_frames, self.crystfel_version, self.silent)
+            job_id, job_dir, n_frames, self.crystfel_version, self.silent,
+            is_local=is_local
+        )
         self.concat(job_dir, filtered)
 
         stream_file = f'{self.list_prefix}_hits.stream' if filtered \
@@ -1276,7 +1306,7 @@ class Workflow:
 
         self.json_log.save_data()
 
-        print('\n-----   TASK: distribute data over SLURM nodes   -----\n')
+        print('\n-----   TASK: distribute data   -----\n')
 
         if self.interactive:
             self.verify_data_config_n_frames()

@@ -7,6 +7,7 @@ from glob import glob
 import h5py
 import json
 import numpy as np
+import psutil
 import re
 from scipy.optimize import curve_fit
 import shutil
@@ -147,14 +148,14 @@ def calc_progress(out_logs, n_total, crystfel_version):
 
 def wait_or_cancel(
     job_id: str, job_dir: str, n_total: int, crystfel_version: str,
-    silent: bool
-    ) -> int:
+    silent: bool, is_local:bool
+) -> int:
     """Monitor slurm jobs and prepare progress bar.
 
     Parameters
     ----------
     job_id : str
-        Id of the slurm job-array.
+        Id of the slurm job-array / local process.
     job_dir : str
         Slurm processing folder.
     n_total : int
@@ -163,25 +164,40 @@ def wait_or_cancel(
         Version of CrystFEL in use.
     silent : bool
         Whether to skip updating the progress bar.
+    is_local : bool
+        Whether indexamajig is running in local.
 
     Returns
     -------
     int
         Total number of processed frames.
     """
-    print(' Waiting for job-array', job_id)
+    if is_local:
+        job_type = 'local process'
+        logs_name = 'local_0.out'
+    else:
+        job_type = 'job-array'
+        logs_name = f'slurm-{job_id}_*.out'
+    print(f' Waiting for {job_type} {job_id}')
     while True:
-        queue = subprocess.check_output(['squeue', '-u', getuser()])
-        tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
-        if len(tasks) == 0:
-            break
+        if is_local:
+            if not psutil.pid_exists(int(job_id)):
+                break
+        else:
+            queue = subprocess.check_output(['squeue', '-u', getuser()])
+            tasks = [x for x in queue.decode('utf-8').split('\n') if job_id in x]
+            if len(tasks) == 0:
+                break
 
-        out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
+        out_logs = glob(f'{job_dir}/{logs_name}')
         if not silent:
-            calc_progress(out_logs, n_total, crystfel_version)
+            n_proc = calc_progress(out_logs, n_total, crystfel_version)
+            if n_proc == n_total:
+                break
 
         time.sleep(1)
     # To ensure all frames have been processed
+    out_logs = glob(f'{job_dir}/{logs_name}')
     n_proc = calc_progress(out_logs, n_total, crystfel_version)
     print()
     if n_proc < n_total:
