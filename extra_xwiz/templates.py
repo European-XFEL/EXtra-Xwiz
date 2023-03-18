@@ -61,6 +61,7 @@ frames_range = {start = 0, end = -1, step = 1}
 vds_names = ["p700000_r0030_vds.h5"]
 cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
+frames_list_file = "none"
 
 [crystfel]
 # Available versions: '0.8.0', '0.9.1', '0.10.2', 'cfel_dev'

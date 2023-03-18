@@ -129,6 +129,13 @@ class Workflow:
                 st_runs = f"r{self.data_runs[0]:04d}-{self.data_runs[-1]:04d}"
             self.list_prefix = f"p{self.data_proposal:06d}_{st_runs}"
 
+        if ('frames_list_file' not in conf['data']
+            or conf['data']['frames_list_file'] == 'none'
+            ):
+            self.frames_list_file = None
+        else:
+            self.frames_list_file = conf['data']['frames_list_file']
+
         self.crystfel_version = conf['crystfel']['version']
         if self.crystfel_version not in cri.crystfel_info.keys():
             raise ValueError(f'Unsupported CrystFEL version: '
@@ -860,22 +867,29 @@ class Workflow:
         print('\n-----   TASK: prepare distributed computing   -----\n')
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
 
-        # Make a list of datasets and frame indices
-        self.frames_list = []
-        for ids in range(self.n_runs):
-            n_frames_raw = self.n_frames_per_vds[ids]
-            n_start = self.frames_range[ids]['start']
-            n_end = self.frames_range[ids]['end']
-            n_step = self.frames_range[ids]['step']
-            if n_end >= n_frames_raw:
-                warnings.warn(
-                    f"For run {self.data_runs[ids]} requested maximum frame"
-                    f" index {n_end} higher than available {n_frames_raw-1}.")
-                n_end = n_frames_raw
-            elif n_end < 0:
-                n_end = n_frames_raw + n_end + 1
-            for ifr in range(n_start, n_end, n_step):
-                self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
+        if self.frames_list_file is None:
+            # Make a list of datasets and frame indices
+            self.frames_list = []
+            for ids in range(self.n_runs):
+                n_frames_raw = self.n_frames_per_vds[ids]
+                n_start = self.frames_range[ids]['start']
+                n_end = self.frames_range[ids]['end']
+                n_step = self.frames_range[ids]['step']
+                if n_end >= n_frames_raw:
+                    warnings.warn(
+                        f"For run {self.data_runs[ids]} requested maximum"
+                        f" frame index {n_end} higher than available"
+                        f" {n_frames_raw-1}.")
+                    n_end = n_frames_raw
+                elif n_end < 0:
+                    n_end = n_frames_raw + n_end + 1
+                for ifr in range(n_start, n_end, n_step):
+                    self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
+        else:
+            print(f'Reading frames list from: {self.frames_list_file}')
+            with open(self.frames_list_file, 'r') as flst:
+                self.frames_list = flst.readlines()
+
         print("Total number of frames to process:", len(self.frames_list))
 
         # Split frames list per slurm node and write to files
