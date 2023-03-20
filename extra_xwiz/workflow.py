@@ -29,13 +29,12 @@ frames_range_default = {'start': 0, 'end': -1, 'step': 1}
 
 class Workflow:
 
-    def __init__(self, home_dir, work_dir, self_dir, automatic=False,
+    def __init__(self, work_dir, self_dir, automatic=False,
                  diagnostic=False, silent=False, reprocess=False,
                  use_peaks=False, use_cheetah=False):
         """Construct a workflow instance from the pre-defined configuration.
            Initialize some class-global 'bookkeeping' variables
         """
-        self.home_dir = home_dir
         self.work_dir = work_dir
         self.self_dir = self_dir
         self.interactive = not automatic
@@ -130,6 +129,13 @@ class Workflow:
                 st_runs = f"r{self.data_runs[0]:04d}-{self.data_runs[-1]:04d}"
             self.list_prefix = f"p{self.data_proposal:06d}_{st_runs}"
 
+        if ('frames_list_file' not in conf['data']
+            or conf['data']['frames_list_file'] == 'none'
+            ):
+            self.frames_list_file = None
+        else:
+            self.frames_list_file = conf['data']['frames_list_file']
+
         self.crystfel_version = conf['crystfel']['version']
         if self.crystfel_version not in cri.crystfel_info.keys():
             raise ValueError(f'Unsupported CrystFEL version: '
@@ -161,8 +167,12 @@ class Workflow:
             )
             exit()
 
-        self.n_nodes_all = conf['slurm']['n_nodes_all']
-        self.duration_all = conf['slurm']['duration_all']
+        if self.partition == 'local':
+            self.n_nodes_all = 1
+            self.duration_all = "72:00:00"
+        else:
+            self.n_nodes_all = conf['slurm']['n_nodes_all']
+            self.duration_all = conf['slurm']['duration_all']
         self.res_lower = conf['proc_coarse']['resolution']
         self.peak_method = conf['proc_coarse']['peak_method']
         self.peak_threshold = conf['proc_coarse']['peak_threshold']
@@ -196,8 +206,14 @@ class Workflow:
                 'frame_filter', {}).get('match_tolerance')
         else:
             self.run_proc_fine = True
-            self.n_nodes_hits = conf['slurm']['n_nodes_hits']
-            self.duration_hits = conf['slurm']['duration_hits']
+            if self.partition == 'local':
+                self.n_nodes_hits = 1
+                self.duration_hits = "72:00:00"
+            else:
+                self.n_nodes_hits = conf['slurm'].get(
+                    'n_nodes_hits', self.n_nodes_all)
+                self.duration_hits = conf['slurm'].get(
+                    'duration_hits', self.duration_all)
             self.cell_tolerance = conf['frame_filter']['match_tolerance']
             self.res_higher = conf['proc_fine']['resolution']
 
@@ -298,6 +314,8 @@ class Workflow:
 
         with open(f'{job_dir}/{prefix}_proc-{self.step}.sh', 'w') as f:
             if self.use_peaks:
+                if self.partition == 'local':
+                    raise NotImplementedError
                 f.write(tmp.PROC_CXI_BASH_SLURM % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
@@ -313,7 +331,11 @@ class Workflow:
                     'HARVEST_OPTION': harvest_option
                 })
             else:
-                f.write(tmp.PROC_VDS_BASH_SLURM % {
+                if self.partition == 'local':
+                    proc_template = tmp.PROC_VDS_BASH_LOCAL
+                else:
+                    proc_template = tmp.PROC_VDS_BASH_SLURM
+                f.write( proc_template % {
                     'IMPORT_CRYSTFEL': crystfel_import,
                     'PREFIX': prefix,
                     'GEOM': geom_keyword,
@@ -334,17 +356,28 @@ class Workflow:
                     'EXTRA_OPTIONS': self.indexamajig_extra_options,
                     'HARVEST_OPTION': harvest_option
                 })
-        if self.reservation != "none":
-            partition_string = f"--reservation={self.reservation}"
+        if self.partition == 'local':
+            with open(f'{job_dir}/local_0.out', 'w') as flog:
+                p = subprocess.Popen(
+                    ['sh', f'{prefix}_proc-{self.step}.sh'],
+                    stdin=subprocess.DEVNULL,
+                    stdout=flog, stderr=flog,
+                    cwd=job_dir, start_new_session=True
+                )
+                proc_out = str(p.pid)
         else:
-            partition_string = f"--partition={self.partition}"
-        slurm_args = ['sbatch',
-                      f'{partition_string}',
-                      f'--time={job_duration}',
-                      f'--array=0-{n_nodes-1}',
-                      f'./{prefix}_proc-{self.step}.sh']
-        proc_out = subprocess.check_output(slurm_args, cwd=job_dir)
-        return proc_out.decode('utf-8').split()[-1]    # job id
+            if self.reservation != "none":
+                partition_string = f"--reservation={self.reservation}"
+            else:
+                partition_string = f"--partition={self.partition}"
+            slurm_args = ['sbatch',
+                            f'{partition_string}',
+                            f'--time={job_duration}',
+                            f'--array=0-{n_nodes-1}',
+                            f'./{prefix}_proc-{self.step}.sh']
+            proc_obj = subprocess.check_output(slurm_args, cwd=job_dir)
+            proc_out = proc_obj.decode('utf-8').split()[-1]    # job id
+        return proc_out
 
     def wrap_process(self, res_limit, cell_keyword, filtered=False):
         """ Perform the processing as distributed computation job;
@@ -366,8 +399,11 @@ class Workflow:
             filtered=filtered
         )
         jlog.save_slurm_info(job_id, n_nodes, job_duration, job_dir)
+        is_local = self.partition == 'local'
         n_proc_frames = utl.wait_or_cancel(
-            job_id, job_dir, n_frames, self.crystfel_version, self.silent)
+            job_id, job_dir, n_frames, self.crystfel_version, self.silent,
+            is_local=is_local
+        )
         self.concat(job_dir, filtered)
 
         stream_file = f'{self.list_prefix}_hits.stream' if filtered \
@@ -831,22 +867,29 @@ class Workflow:
         print('\n-----   TASK: prepare distributed computing   -----\n')
         ds_names = self.cxi_names if self.use_peaks else self.vds_names
 
-        # Make a list of datasets and frame indices
-        self.frames_list = []
-        for ids in range(self.n_runs):
-            n_frames_raw = self.n_frames_per_vds[ids]
-            n_start = self.frames_range[ids]['start']
-            n_end = self.frames_range[ids]['end']
-            n_step = self.frames_range[ids]['step']
-            if n_end >= n_frames_raw:
-                warnings.warn(
-                    f"For run {self.data_runs[ids]} requested maximum frame"
-                    f" index {n_end} higher than available {n_frames_raw-1}.")
-                n_end = n_frames_raw
-            elif n_end < 0:
-                n_end = n_frames_raw + n_end + 1
-            for ifr in range(n_start, n_end, n_step):
-                self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
+        if self.frames_list_file is None:
+            # Make a list of datasets and frame indices
+            self.frames_list = []
+            for ids in range(self.n_runs):
+                n_frames_raw = self.n_frames_per_vds[ids]
+                n_start = self.frames_range[ids]['start']
+                n_end = self.frames_range[ids]['end']
+                n_step = self.frames_range[ids]['step']
+                if n_end >= n_frames_raw:
+                    warnings.warn(
+                        f"For run {self.data_runs[ids]} requested maximum"
+                        f" frame index {n_end} higher than available"
+                        f" {n_frames_raw-1}.")
+                    n_end = n_frames_raw
+                elif n_end < 0:
+                    n_end = n_frames_raw + n_end + 1
+                for ifr in range(n_start, n_end, n_step):
+                    self.frames_list.append(f'{ds_names[ids]} //{ifr}\n')
+        else:
+            print(f'Reading frames list from: {self.frames_list_file}')
+            with open(self.frames_list_file, 'r') as flst:
+                self.frames_list = flst.readlines()
+
         print("Total number of frames to process:", len(self.frames_list))
 
         # Split frames list per slurm node and write to files
@@ -1277,7 +1320,7 @@ class Workflow:
 
         self.json_log.save_data()
 
-        print('\n-----   TASK: distribute data over SLURM nodes   -----\n')
+        print('\n-----   TASK: distribute data   -----\n')
 
         if self.interactive:
             self.verify_data_config_n_frames()
@@ -1384,7 +1427,6 @@ def main(argv=None):
         help="Generate an advanced config instead of the base one."
     )
     args = ap.parse_args(argv)
-    home_dir = os.path.join('/home', os.getlogin())
     work_dir = os.getcwd()
     self_dir = os.path.split(os.path.realpath(__file__))[0]
     if not os.path.exists(f'{work_dir}/xwiz_conf.toml'):
@@ -1401,7 +1443,7 @@ def main(argv=None):
     print(48 * '~')
     print(' xWiz - EXtra tool for pipelined SFX workflows')
     print(48 * '~')
-    workflow = Workflow(home_dir, work_dir, self_dir,
+    workflow = Workflow(work_dir, self_dir,
                         automatic=args.automatic,
                         diagnostic=args.diagnostic,
                         silent=args.silent,
