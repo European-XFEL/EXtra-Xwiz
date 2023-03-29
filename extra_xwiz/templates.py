@@ -112,7 +112,7 @@ run_refine = false
 match_tolerance = 0.1
 
 [proc_fine]
-execute = true
+execute = false
 resolution = 2.0
 
 [partialator_split]
