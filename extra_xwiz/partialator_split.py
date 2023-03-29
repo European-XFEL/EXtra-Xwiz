@@ -317,20 +317,23 @@ class DatasetSplitter:
             )
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode == 'by_pulse_id':
-            pulse_datasets = split_config['pulse_datasets']
-            if ALL_DATASET in pulse_datasets:
+            self.manual_datasets = split_config['manual_datasets']
+            if ALL_DATASET in self.manual_datasets:
                 raise ValueError(
                     f"Dataset name '{ALL_DATASET}' is reserved - please "
                     f"use a different dataset name.")
 
-            self.range_dataset = dict()
-            for p_dataset in pulse_datasets:
-                if isinstance(pulse_datasets[p_dataset][0], list):
-                    for p_rng in pulse_datasets[p_dataset]:
-                        self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
-                else:
-                    p_rng = pulse_datasets[p_dataset]
-                    self.range_dataset[(p_rng[0], p_rng[1])] = p_dataset
+            for dset in self.manual_datasets:
+                self.manual_datasets[dset] = utl.into_list(
+                    self.manual_datasets[dset]
+                )
+                dset_ranges = self.manual_datasets[dset]
+                for range_i, range_val in enumerate(dset_ranges):
+                    if not isinstance(range_val, dict):
+                        dset_ranges[range_i] = {start=range_val, end=range_val}
+                self.manual_datasets[dset] = dict_list_update_default(
+                    dset_ranges, utl.DEFAULT_RANGE
+                )
 
         self.all_datasets = set()
 
@@ -401,12 +404,30 @@ class DatasetSplitter:
                 dataset = f'{state_base}_{state_num}'
             else:
                 dataset = state_base
-        elif self.mode == 'by_pulse_id':
-            for cur_range in self.range_dataset:
-                if pulse_id >= cur_range[0] and pulse_id <= cur_range[1]:
-                    dataset = self.range_dataset[cur_range]
-                    break
+        elif self.mode in ['by_pulse_id', 'by_train_id']:
+            if self.mode == 'by_train_id':
+                test_value = train_id
             else:
+                test_value = pulse_id
+
+            datasets_match = []
+            for dset in self.manual_datasets:
+                do_ranges_match = []
+                for range_dict in self.manual_datasets[dset]:
+                    do_ranges_match.append(
+                        utl.is_value_in_range(test_value, range_dict)
+                    )
+                if True in do_ranges_match:
+                    datasets_match.append(dset)
+
+            if len(datasets_match) == 1:
+                dataset = datasets_match[0]
+            else:
+                warnings.warn(
+                    f"Partialator manual split '{self.mode}': value"
+                    f" {test_value} matches next datasets: {datasets_match}."
+                    f" Setting dataset to 'unknown'."
+                )
                 dataset = 'unknown'
 
         self.all_datasets.add(dataset)
