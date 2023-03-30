@@ -316,7 +316,7 @@ class DatasetSplitter:
                 plot_signal=split_config['plot_signal']
             )
             store_laser_pattern(self.laser_state, self.folder)
-        elif self.mode == 'by_pulse_id':
+        elif self.mode in ['by_pulse_id', 'by_train_id']:
             self.manual_datasets = split_config['manual_datasets']
             if ALL_DATASET in self.manual_datasets:
                 raise ValueError(
@@ -330,8 +330,11 @@ class DatasetSplitter:
                 dset_ranges = self.manual_datasets[dset]
                 for range_i, range_val in enumerate(dset_ranges):
                     if not isinstance(range_val, dict):
-                        dset_ranges[range_i] = {start=range_val, end=range_val}
-                self.manual_datasets[dset] = dict_list_update_default(
+                        dset_ranges[range_i] = {
+                            'start': range_val,
+                            'end': range_val
+                        }
+                self.manual_datasets[dset] = utl.dict_list_update_default(
                     dset_ranges, utl.DEFAULT_RANGE
                 )
 
