@@ -22,6 +22,9 @@ import toml
 from . import crystfel_info as cri
 
 
+DEFAULT_RANGE = {'start': 0, 'end': -1, 'step': 1}
+
+
 def estimate_moments(sample):
     """ Calculate the 'naive' height, mean and stddev of a sample,
         to serve as starting values (estimates) for a Gauss fit.
@@ -907,3 +910,31 @@ def table_weighted_average(
         w_sum += int(item[col_weight])
         f_sum += (int(item[col_weight]) * float(item[col_value]))
     return (f_sum / w_sum)
+
+
+def is_value_in_range(value: int, range_dict: dict) -> bool:
+    """Check if integer value belongs to the specified range.
+
+    Parameters
+    ----------
+    value : int
+        Integer value to check.
+    range_dict : dict
+        Range dictionary of the form:
+            {'start': 0, 'end': -1, 'step': 1}
+
+    Returns
+    -------
+    bool
+        True if in the specified range.
+    """
+    if value < range_dict['start']:
+        return False
+    if range_dict['end'] >= 0 and value > range_dict['end']:
+        return False
+    div_modulo = (value - range_dict['start']) % range_dict['step']
+    if div_modulo == 0:
+        return True
+    else:
+        return False
+

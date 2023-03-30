@@ -112,14 +112,14 @@ run_refine = false
 match_tolerance = 0.1
 
 [proc_fine]
-execute = true
+execute = false
 resolution = 2.0
 
 [partialator_split]
 execute = false
 # Set frames from these trains to dataset 'ignore':
 ignore_trains = []
-# Available modes: "on_off", "on_off_numbered", "by_pulse_id"
+# Available modes: "on_off", "on_off_numbered", "by_pulse_id", "by_train_id"
 mode = "on_off"
 
 # Required only for "on_off" or "on_off_numbered" modes:
@@ -127,16 +127,11 @@ xray_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_0.output", "data.rawData"]
 laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
 plot_signal = true
 
-# Required only for "by_pulse_id" mode:
-[partialator_split.pulse_datasets]
-# Current implementation:
-  my_1 = [0,4]
-  my_2 = [12, 20]
-  my_3 = [24, 48]
-# Idea for the new Implementation:
-#  my_on = {start=32, end=-1, step=32}
-#  my_off = [{start=40, step=32}, {start=48, step=32}, {start=56, step=32}]
-#  my_ignore = [0, 8, 16, 24]
+# Required only for "by_pulse_id" or "by_train_id" mode:
+[partialator_split.manual_datasets]
+  my_on = {start=32, end=-1, step=32}
+  my_off = [{start=40, step=32}, {start=48, step=32}, {start=56, step=32}]
+  my_ignore = [0, 8, 16, 24]
 
 [merging]
 point_group = "422"

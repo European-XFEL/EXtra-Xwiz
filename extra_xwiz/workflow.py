@@ -25,8 +25,6 @@ from . import summary as smr
 from .crystfel_tools import crystfel_stream as cstr
 
 
-frames_range_default = {'start': 0, 'end': -1, 'step': 1}
-
 class Workflow:
 
     def __init__(self, work_dir, self_dir, automatic=False,
@@ -118,7 +116,7 @@ class Workflow:
         self.frames_range = utl.dict_list_broadcast(
             self.frames_range, self.n_runs)
         self.frames_range = utl.dict_list_update_default(
-            self.frames_range, frames_range_default)
+            self.frames_range, utl.DEFAULT_RANGE)
 
         if 'list_prefix' in conf['data']:
             self.list_prefix = conf['data']['list_prefix']
@@ -594,7 +592,7 @@ class Workflow:
             self.frames_range = utl.dict_list_broadcast(
                 self.frames_range, self.n_runs)
             self.frames_range = utl.dict_list_update_default(
-                self.frames_range, frames_range_default)
+                self.frames_range, utl.DEFAULT_RANGE)
             utl.set_dotdict_val(
                 self.overrides, "data.frames_range", self.frames_range)
 
