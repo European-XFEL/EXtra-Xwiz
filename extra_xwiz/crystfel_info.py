@@ -49,4 +49,14 @@ crystfel_info = {
             CRYSTALS_PATTERN_8,
         'contain_harvest': True,
     },
+
+    'maxwell_dev': {
+        'import':
+            'module load maxwell crystfel/0-devel',
+        'log_frames_pattern':
+            FRAMES_PATTERN_9,
+        'log_crystals_pattern':
+            CRYSTALS_PATTERN_8,
+        'contain_harvest': True,
+    },
 }
