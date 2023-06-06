@@ -1049,7 +1049,7 @@ class Workflow:
                     dset_frame_counts[dset][1] += 1
 
             if (fr_id in stream_data_2
-                and stream_data_2[fr_id]['crystal'] is not None
+                and stream_data_2[fr_id]['crystals'] is not None
                 ):
                 for dset in dsets_list:
                     dset_frame_counts[dset][2] += 1
