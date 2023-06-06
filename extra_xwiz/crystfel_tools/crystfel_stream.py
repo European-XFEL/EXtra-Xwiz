@@ -15,7 +15,7 @@ chunk_tmp_dict = {
     'num_peaks': -1,
     'peak_resolution': -1,
     'peaks': None,
-    'crystal': None
+    'crystals': None
 }
 
 peak_tmp_dict = {
@@ -101,6 +101,7 @@ def read_crystfel_stream(stream: TextIO) -> dict:
     in_chunk = False
     in_peaks = False
     in_crystal = False
+    cr_id = 0
     in_reflections = False
 
     for line in stream:
@@ -131,9 +132,9 @@ def read_crystfel_stream(stream: TextIO) -> dict:
                     if line.startswith('End of reflections'):
                         in_reflections = False
                     elif not line.startswith('   h    k    l'):
-                        curr_fr_data['crystal']['reflections'].append(
+                        crystal_dict['reflections'].append(
                             reflections_tmp_dict.copy())
-                        refl_dict = curr_fr_data['crystal']['reflections'][-1]
+                        refl_dict = crystal_dict['reflections'][-1]
                         refl_data = line.split()
                         refl_dict['h'] = int(refl_data[0])
                         refl_dict['k'] = int(refl_data[1])
@@ -147,9 +148,8 @@ def read_crystfel_stream(stream: TextIO) -> dict:
                         refl_dict['panel'] = refl_data[9]
                 elif line.startswith('Reflections measured after indexing'):
                     in_reflections = True
-                    curr_fr_data['crystal']['reflections'] = list()
+                    crystal_dict['reflections'] = list()
                 else:
-                    crystal_dict = curr_fr_data['crystal']
                     for par_name, par_type in crystal_pars_type.items():
                         if line.startswith(par_name):
                             crystal_dict[par_name] = par_type(line.split()[2])
@@ -181,7 +181,13 @@ def read_crystfel_stream(stream: TextIO) -> dict:
                                     break
             elif line.startswith('--- Begin crystal'):
                 in_crystal = True
-                curr_fr_data['crystal'] = crystal_tmp_dict.copy()
+                if curr_fr_data['crystals'] is None:
+                    curr_fr_data['crystals'] = list()
+                    cr_id = 0
+                else:
+                    cr_id += 1
+                curr_fr_data['crystals'].append(crystal_tmp_dict.copy())
+                crystal_dict = curr_fr_data['crystals'][cr_id]
             else:
                 for par_name, par_type in chunk_pars_type.items():
                     if line.startswith(par_name):
