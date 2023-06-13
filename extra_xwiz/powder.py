@@ -54,7 +54,8 @@ def pix_max_over_frames(fn, n_frames):
                 data[k] = _data[j]
                 k += 1
             t2 = time.time()
-            print(f'sub-max for range {low:5d} to {high:5d}') 
+            print(f'sub-max for range {low:5d} to {high:5d}')
+            data[np.isnan(data)] = 0.
             _px_max.append(np.max(data, axis=0))
             t3 = time.time()
             print(f'reading: {(t2 - t1):.3f} s, maximizing: {(t3 - t2):.3f} s')
