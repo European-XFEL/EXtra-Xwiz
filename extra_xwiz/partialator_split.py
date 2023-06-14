@@ -128,7 +128,8 @@ def align_adc_signal(signal: np.ndarray, peak_ids: np.ndarray) -> int:
 
 def get_laser_state_from_diode(
     proposal: int, run: int, xray_signal_src: list, laser_signal_src: list,
-    pulse_ids: np.ndarray, folder: str=".", plot_signal: bool=False
+    pulse_ids: np.ndarray, folder: str=".", plot_signal: bool=False,
+    ignore_trains: set=None
 ) -> xr.DataArray:
     """Estimate PP laser state from the fastADC diode signal.
 
@@ -151,12 +152,17 @@ def get_laser_state_from_diode(
         Folder to store plots of fastADC data (if any).
     plot_signal : bool, optional
         Whether to plot fastADC data for all unique laser patterns.
+    ignore_trains : set, optional
+        A set of train ids to skip.
 
     Returns
     -------
     xr.DataArray
         DataArray of the PP laser state for all trains and pulses.
     """
+    if ignore_trains is None:
+        ignore_trains = set()
+
     data_run = open_run(proposal=proposal, run=run, data="all")
     first_tid = int(data_run.train_ids[0])
 
@@ -171,6 +177,9 @@ def get_laser_state_from_diode(
     data_select = data_run.select(
         [xray_signal_src, laser_signal_src]).trains(require_all=True)
     for train_id, data in data_select:
+        if train_id in ignore_trains:
+            continue
+
         xray_signal = np.array(data[xray_signal_src[0]][xray_signal_src[1]])
         laser_signal = np.array(data[laser_signal_src[0]][laser_signal_src[1]])
 
@@ -304,6 +313,8 @@ class DatasetSplitter:
         else:
             self.ignore_trains = []
 
+        data_ignore_trains = set(self.incomplete_trains) | set(self.ignore_trains)
+
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
             self.laser_state = get_laser_state_from_diode(
@@ -313,7 +324,8 @@ class DatasetSplitter:
                 laser_signal_src=split_config['laser_signal'],
                 pulse_ids=self.pulses_array,
                 folder=self.folder,
-                plot_signal=split_config['plot_signal']
+                plot_signal=split_config['plot_signal'],
+                ignore_trains=data_ignore_trains
             )
             store_laser_pattern(self.laser_state, self.folder)
         elif self.mode in ['by_pulse_id', 'by_train_id']:
