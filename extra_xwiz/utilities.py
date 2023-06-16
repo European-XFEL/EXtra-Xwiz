@@ -1,21 +1,23 @@
 """Utilities"""
 
 from ast import Pass
+from collections.abc import Iterable
 from copy import deepcopy
+from functools import wraps
 from getpass import getuser
 from glob import glob
-import h5py
 import json
-import numpy as np
 import psutil
 import re
-from scipy.optimize import curve_fit
 import shutil
 import subprocess
 import os, re, time
-from typing import Any, Type, Tuple, Collection
+from typing import Any, Type, Tuple, Collection, Callable
 import warnings
 
+import h5py
+import numpy as np
+from scipy.optimize import curve_fit
 import toml
 
 # Local imports
@@ -937,4 +939,26 @@ def is_value_in_range(value: int, range_dict: dict) -> bool:
         return True
     else:
         return False
+
+
+def ignore_none(comp_func: Callable) -> Callable:
+    """Decorator for min/max functions to ignore Nones"""
+    @wraps(comp_func)
+    def nones_wrapper(*args, **kwargs):
+        if len(args) == 1:
+            args = tuple(args[0])
+        no_none_args = []
+        for val in args:
+            if val is not None:
+                no_none_args.append(val)
+        n_no_none_vals = len(no_none_args)
+        if n_no_none_vals == 0:
+            return None
+        elif n_no_none_vals == 1:
+            return no_none_args[0]
+        else:
+            return comp_func(no_none_args, **kwargs)
+    return nones_wrapper
+
+nanmax = ignore_none(max)
 
