@@ -360,10 +360,13 @@ class DatasetSplitter:
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
         detector data."""
+        # Positions of unique train ids (append) the number of frames
         trains_pos = np.append(
             np.where(np.roll(self.frame_trains,1) != self.frame_trains),
             self.frame_trains.shape[0]
         )
+        # An array of differences between positions of unique train ids
+        # This correspond to the number of pulses in each train
         trains_pos_diff = np.ediff1d(trains_pos)
         n_pulses = round(np.median(trains_pos_diff))
 
