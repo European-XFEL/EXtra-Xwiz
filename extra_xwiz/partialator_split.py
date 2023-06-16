@@ -313,7 +313,8 @@ class DatasetSplitter:
         else:
             self.ignore_trains = []
 
-        data_ignore_trains = set(self.incomplete_trains) | set(self.ignore_trains)
+        data_ignore_trains = set(self.ignore_trains)
+        data_ignore_trains |= set(self.incomplete_trains)
 
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
@@ -354,32 +355,32 @@ class DatasetSplitter:
 
     def get_trains_array(self) -> np.ndarray:
         """Prepare an array with all train ids in the stored data."""
-        trains_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
-        return self.frame_trains[trains_pos]
+        train_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
+        return self.frame_trains[train_pos]
 
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
         detector data."""
         # Positions of unique train ids (append) the number of frames
-        trains_pos = np.append(
+        train_pos = np.append(
             np.where(np.roll(self.frame_trains,1) != self.frame_trains),
             self.frame_trains.shape[0]
         )
         # An array of differences between positions of unique train ids
         # This correspond to the number of pulses in each train
-        trains_pos_diff = np.ediff1d(trains_pos)
-        n_pulses = round(np.median(trains_pos_diff))
+        train_pos_diff = np.ediff1d(train_pos)
+        n_pulses = round(np.median(train_pos_diff))
 
-        incomplete_trains_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
-        self.incomplete_trains = self.frame_trains[incomplete_trains_pos]
+        incomplete_train_pos = train_pos[np.where(train_pos_diff != n_pulses)]
+        self.incomplete_trains = self.frame_trains[incomplete_train_pos]
         if self.incomplete_trains.shape[0] != 0:
             warnings.warn(
                 f"Expected {n_pulses} pulses in each train, but different "
                 f"n_pulses found for train(s) "
                 f"{', '.join([str(tid) for tid in self.incomplete_trains])}.")
 
-        for train_pos in trains_pos:
-            if train_pos not in incomplete_trains_pos:
+        for train_pos in train_pos:
+            if train_pos not in incomplete_train_pos:
                 pulses_array = self.frame_pulses[train_pos:train_pos+n_pulses]
                 break
         else:
@@ -413,7 +414,7 @@ class DatasetSplitter:
         elif self.mode == 'on_off_numbered':
             state_base = self.decode_state(train_id, pulse_id)
             if state_base in ['off', 'on']:
-                state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
+                state_array = np.array(self.laser_state.loc[train_id:pulse_id])
                 state_change = np.where(np.roll(state_array,1)!=state_array)[0]
                 if state_change.shape[0] > 0:
                     state_num = state_array.shape[0] - state_change[-1]
