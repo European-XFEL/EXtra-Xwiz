@@ -19,8 +19,9 @@ ALL_DATASET = "all_data"
 IGNORE_DATASETS = {'unknown', 'ignore'}
 
 def plot_adc_signal(
-    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
-    pulse_ids: np.ndarray, laser_align: int, laser_per_pulse: np.ndarray
+    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float=None,
+    pulse_ids: np.ndarray=None, laser_align: int=0,
+    laser_per_pulse: np.ndarray=None
 ) -> Figure:
     """Prepare a figure with X-ray pulses and laser state signal.
 
@@ -30,15 +31,18 @@ def plot_adc_signal(
         Array with X-ray pulses fastADC signal.
     laser_signal : np.ndarray
         Array with PP laser pattern fastADC signal.
-    threshold : float
+    threshold : float, optional
         Threshold (in arbitrary intensity units) to separate diode
-        signal from the background.
-    pulse_ids : np.ndarray
+        signal from the background. By default None.
+    pulse_ids : np.ndarray, optional
         Array of pulse peaks positions in the fastADC data.
-    laser_align : int
+        By default None.
+    laser_align : int, optional
         Shift between PP laser and X-ray pulses signals.
-    laser_per_pulse : np.ndarray
+        By default 0.
+    laser_per_pulse : np.ndarray, optional
         Boolean array with laser state per pulse peak.
+        By default None.
 
     Returns
     -------
@@ -62,31 +66,40 @@ def plot_adc_signal(
         ['royalblue', 'darkorange']
     ):
         ax.plot(x, dataset, color=color)
-        ax.plot(
-            [0, n_samples], [threshold, threshold], color='lightcoral',
-            linestyle='-.'
-        )
+
+        if threshold is not None:
+            ax.plot(
+                [0, n_samples], [threshold, threshold], color='lightcoral',
+                linestyle='-.'
+            )
 
         ax.set_xlim(0, n_samples)
         ax.set_ylim(min_y-offset_y, max_y+offset_y)
         ax.set_title(label)
         ax.set_ylabel('Intensity')
 
-    axes[0].plot(
-        pulse_ids, xray_signal[pulse_ids], color='limegreen', marker="o",
-        markersize=4, linestyle='None'
-    )
-    true_ids = pulse_ids[np.where(laser_per_pulse)[0]] + laser_align
-    false_ids = (pulse_ids[np.where(np.logical_not(laser_per_pulse))[0]]
-                 + laser_align)
-    axes[1].plot(
-        true_ids, laser_signal[true_ids], color='limegreen', marker="o",
-        markersize=4, linestyle='None'
-    )
-    axes[1].plot(
-        false_ids, laser_signal[false_ids], color='firebrick', marker="o",
-        markersize=4, linestyle='None'
-    )
+    if pulse_ids is not None:
+        axes[0].plot(
+            pulse_ids, xray_signal[pulse_ids], color='limegreen', marker="o",
+            markersize=4, linestyle='None'
+        )
+        if laser_per_pulse is None:
+            laser_pulse_ids = pulse_ids + laser_align
+            axes[1].plot(
+                laser_pulse_ids, laser_signal[laser_pulse_ids],
+                color='royalblue', marker="o", markersize=4, linestyle='None'
+            )
+        else:
+            true_ids = pulse_ids[laser_per_pulse == 1] + laser_align
+            false_ids = pulse_ids[laser_per_pulse == 0] + laser_align
+            axes[1].plot(
+                true_ids, laser_signal[true_ids], color='limegreen',
+                marker="o", markersize=4, linestyle='None'
+            )
+            axes[1].plot(
+                false_ids, laser_signal[false_ids], color='firebrick',
+                marker="o", markersize=4, linestyle='None'
+            )
     axes[1].set_xlabel('ADC sample #')
 
     return fig
@@ -183,7 +196,10 @@ def get_laser_state_from_diode(
         xray_signal = np.array(data[xray_signal_src[0]][xray_signal_src[1]])
         laser_signal = np.array(data[laser_signal_src[0]][laser_signal_src[1]])
 
-        threshold = get_adc_threshold(xray_signal)
+        xray_threshold = get_adc_threshold(xray_signal)
+        laser_threshold = get_adc_threshold(laser_signal)
+        threshold = utl.nanmax(xray_threshold, laser_threshold)
+
         pulses_thr = np.array(xray_signal) > threshold
         laser_thr = np.array(laser_signal) > threshold
 
