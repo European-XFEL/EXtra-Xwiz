@@ -107,10 +107,29 @@ def plot_adc_signal(
 
 def get_adc_threshold(signal: np.ndarray) -> float:
     """Estimate threshold in arbitrary intensity units to separate diode
-    signal from the background. Set to 5% of the difference between
-    signal minimum and maximum values."""
-    th_percent = 0.05
-    return np.max(signal)*th_percent + np.min(signal)*(1-th_percent)
+    signal from the background. Set to 20 sigma from the background
+    distribution."""
+    sigma_cut = 20.0
+    sigma_quantile = 0.15865
+    quantiles = [sigma_quantile, 0.5, 1-sigma_quantile]
+    quant_values = np.quantile(signal, quantiles)
+    median_value = quant_values[1]
+    sigma_value = (quant_values[2] - quant_values[0]) / 2
+
+    signal_min_cut = int(median_value - sigma_cut*sigma_value)
+    signal_min = np.min(signal)
+    if signal_min < signal_min_cut:
+        raise ValueError(
+            f"FastADC signal below {sigma_cut} sigma cut: min. value "
+            f"{signal_min} < min. cut {signal_min_cut}.")
+
+    signal_max_cut = int(median_value + sigma_cut*sigma_value)
+    signal_max = np.max(signal)
+    if signal_max <= signal_max_cut:
+        # Whole distribution within +-sigma_cut, cannot set a threshold
+        return None
+    else:
+        return signal_max_cut
 
 
 def align_adc_signal(signal: np.ndarray, peak_ids: np.ndarray) -> int:
