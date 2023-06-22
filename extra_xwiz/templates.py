@@ -122,6 +122,29 @@ match_tolerance = 0.1
 resolution = 2.0
 integration_radii = "2,3,5"
 
+[partialator_split]
+execute = false
+# Set frames from these trains to dataset 'ignore':
+ignore_trains = []
+# Available modes: "on_off", "on_off_numbered", "by_pulse_id"
+mode = "on_off"
+
+# Required only for "on_off" or "on_off_numbered" modes:
+xray_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_0.output", "data.rawData"]
+laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
+plot_signal = true
+
+# Required only for "by_pulse_id" mode:
+[partialator_split.pulse_datasets]
+# Current implementation:
+  my_1 = [0,4]
+  my_2 = [12, 20]
+  my_3 = [24, 48]
+# Idea for the new Implementation:
+#  my_on = {start=32, end=-1, step=32}
+#  my_off = [{start=40, step=32}, {start=48, step=32}, {start=56, step=32}]
+#  my_ignore = [0, 8, 16, 24]
+
 [merging]
 point_group = "422"
 scaling_model = "unity"
@@ -242,7 +265,8 @@ partialator \\
     -y %(POINT_GROUP)s \\
     --max-adu=%(MAX_ADU)s \\
     --iterations=%(N_ITER)s \\
-    --model=%(MODEL)s
+    --model=%(MODEL)s \\
+    %(PARTIALATOR_SPLIT)s
 """
 
 CHECK_HKL_WRAP = """\
@@ -252,11 +276,11 @@ source /usr/share/Modules/init/sh
 %(IMPORT_CRYSTFEL)s
 
 check_hkl \\
-    %(PREFIX)s_merged.hkl \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl \\
     -y %(POINT_GROUP)s \\
     -p %(UNIT_CELL)s \\
     --highres=%(HIGH_RES)s \\
-    --shell-file=%(PREFIX)s_completeness.dat
+    --shell-file=%(PREFIX)s_completeness%(DS_SUFFIX)s.dat
 """
 
 COMPARE_HKL_WRAP = """\
@@ -266,13 +290,13 @@ source /usr/share/Modules/init/sh
 %(IMPORT_CRYSTFEL)s
 
 compare_hkl \\
-    %(PREFIX)s_merged.hkl1 \\
-    %(PREFIX)s_merged.hkl2 \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl1 \\
+    %(PREFIX)s_merged%(DS_SUFFIX)s.hkl2 \\
     -y %(POINT_GROUP)s \\
     -p %(UNIT_CELL)s \\
     --highres=%(HIGH_RES)s \\
     --fom=%(FOM)s \\
-    --shell-file=%(PREFIX)s_%(FOM_TAG)s.dat
+    --shell-file=%(PREFIX)s_%(FOM)s%(DS_SUFFIX)s.dat
 """
 
 CELL_EXPLORER_WRAP = """\

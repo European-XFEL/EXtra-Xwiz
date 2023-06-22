@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import re
 from typing import TextIO, Any
+import xarray as xr
 
 
 def config_to_summary(
@@ -110,43 +111,72 @@ def report_cells(prefix, cell_strings):
             f.write(string)
 
 
-def report_merging_metrics(part_dir, prefix, log_items):
-    """Report overall (un-binned) crystallographic figures-of-merit
-    """
-    labels = ['Completeness', 'Signal-over-noise', 'CC_1/2', 'CC*', 'R_split']
-    fstring = ['{:15.2f}', '{:15.2f}', '{:15.4f}', '{:15.4f}', '{:15.2f}']
-    it_tags = ['', '<snr>', 'CC', 'CC*', 'Rsplit'] # as in the log_items list
+def report_frame_counts(
+    frame_counts: xr.DataArray, prefix :str
+) -> None:
+    """Report overall frame counts per dataset."""
+    datasets = frame_counts.coords['dataset'].values
+    counts = frame_counts.coords['frame_count'].values
+    n_counts = len(counts)
+    frame_count_len = 0
+    for count in counts:
+        frame_count_len = max(frame_count_len, len(count))
+    max_ds_len = 12
+    for dset in datasets:
+        max_ds_len = max(max_ds_len, len(dset))
+    
+    counts_text = []
+    counts_text.append("\nOverall frame rates:")
+    counts_text.append(" "*frame_count_len)
+    for dset in datasets:
+        counts_text[-1] += f"{dset:>{max_ds_len}}"
+    for count in counts:
+        counts_text.append(f"{count:{frame_count_len}}")
+        for dset in datasets:
+            count_val = frame_counts.loc[dset, count].item()
+            if 'N_' in count:
+                counts_text[-1] += f"{int(count_val):{max_ds_len}d}"
+            else:
+                counts_text[-1] += f"{(count_val*100):{max_ds_len-1}.3f}%"
+
+    with open(f'{prefix}.summary', 'a') as f_sum:
+        for line in counts_text:
+            f_sum.write(line + "\n")
+
+
+def report_merging_metrics(
+    partialator_foms: xr.DataArray, prefix :str
+) -> None:
+    """Report overall (un-binned) crystallographic figures-of-merit."""
+    datasets = partialator_foms.coords['dataset'].values
+    shells = partialator_foms.coords['shell'].values
+    foms = partialator_foms.coords['fom'].values
+    n_foms = len(foms)
+    max_ds_len = 28
+    for dataset in datasets:
+        max_ds_len = max(max_ds_len, len(dataset))
+    sh_len = max_ds_len // len(shells)
+    sh_left = max_ds_len - sh_len*len(shells)
+    
+    foms_text = []
+    foms_text.append("\nCrystallographic FOMs:")
+    foms_text.append(" "*17)
+    foms_text.append(" "*17)
+    for fom in foms:
+        foms_text.append(f"{fom:17}")
+    for dataset in datasets:
+        foms_text[1] += dataset.center(max_ds_len)
+        for i_row in range(2, 3+n_foms):
+            foms_text[i_row] += " "*sh_left
+        for shell in shells:
+            foms_text[2] += f"{shell:>{sh_len}}"
+            for i_fom, fom in enumerate(foms):
+                fom_val = partialator_foms.loc[dataset, shell, fom].item()
+                foms_text[3+i_fom] += f"{fom_val:{sh_len}.4}"
 
     with open(f'{prefix}.summary', 'a') as f:
-        f.write('\nCrystallographic FOMs:')
-        f.write('\n                          overall    outer shell\n')
-        for i, table in enumerate(['completeness', 'completeness', 'cchalf',
-                                   'ccstar', 'rsplit']):
-            cw = [1, 1, 2, 2, 2][i]  # column index for n_reflections = weight
-            cf = [3, 6, 1, 1, 1][i]  # column index for respective FOM value
-
-            with open(f'{part_dir}/{prefix}_{table}.dat', 'r') as fd:
-                data_lines = fd.readlines()[1:]
-            '''
-            overall completeness as weighted average; else taken from captured
-            STDERR of check_hkl and compare_hkl tool (list 'log_items')
-            '''
-            if i == 0:
-                w_sum = 0.0
-                f_sum = 0.0
-                for ln in data_lines:
-                    item = ln.split()
-                    w_sum += int(item[cw])
-                    f_sum += (int(item[cw]) * float(item[cf]))
-                fom_all = f_sum / w_sum
-            else:
-                fom_all = float(log_items[log_items.index(it_tags[i]) + 2])
-
-            # last line = high-resolution shell
-            fom_high = float(data_lines[-1].split()[cf])
-
-            f.write('{:18}'.format(labels[i]) + fstring[i].format(fom_all)
-                    + fstring[i].format(fom_high) + '\n')
+        for line in foms_text:
+            f.write(line + "\n")
 
 
 def report_reprocess(prefix):

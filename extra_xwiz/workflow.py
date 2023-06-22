@@ -8,15 +8,20 @@ import re
 import shutil
 import subprocess
 import warnings
+import xarray as xr
 
 import findxfel as fdx
 
 from . import config
 from . import crystfel_info as cri
 from . import geometry as geo
-from . import utilities as utl
+from . import json_log as jlog
+from . import partialator_split as pspl
 from . import templates as tmp
+from . import utilities as utl
 from . import summary as smr
+
+from .crystfel_tools import crystfel_stream as cstr
 
 
 class Workflow:
@@ -77,7 +82,7 @@ class Workflow:
             self.vds_names = utl.string_to_list(conf['data']['vds_names'])
         else:
             self.vds_names = utl.into_list(conf['data']['vds_names'])
-        if not len(self.vds_names) == len(self.data_runs_paths):
+        if len(self.vds_names) != len(self.data_runs_paths):
             print('CONFIG ERROR: unequal numbers of VDS files and run-paths')
             exit(0)
         if 'cxi_names' in conf['data']:
@@ -159,10 +164,22 @@ class Workflow:
         self.cell_run_refine = conf['unit_cell']['run_refine']
         self.cell_tolerance = conf['frame_filter']['match_tolerance']
         self.integration_radii = conf['proc_fine']['integration_radii']
-        self.point_group = conf['merging']['point_group']
-        self.scale_model = conf['merging']['scaling_model']
-        self.scale_iter = conf['merging']['scaling_iterations']
-        self.max_adu = conf['merging']['max_adu']
+
+        if ('partialator_split' in conf
+            and conf['partialator_split']['execute']
+            ):
+            self.run_partialator_split = True
+            self.partialator_split_config = conf['partialator_split']
+        else:
+            self.run_partialator_split = False
+
+        self.run_partialator = False
+        if 'merging' in conf:
+            self.run_partialator = True
+            self.point_group = conf['merging']['point_group']
+            self.scale_model = conf['merging']['scaling_model']
+            self.scale_iter = conf['merging']['scaling_iterations']
+            self.max_adu = conf['merging']['max_adu']
         self.config = conf      # store the config dictionary to report later
         self.overrides = {}     # collect optional config overrides
         self.hit_list = []
@@ -822,13 +839,13 @@ class Workflow:
         print("Total number of frames to process:", sum(nfr_cut_total))
 
         # Make a list of datasets and frame indices
-        frames_lst = list()
+        self.frames_lst = list()
         for ids in range(n_data_files):
             for ifr in range(nfr_cut_total[ids]):
-                frames_lst.append(f'{ds_names[ids]} //{ifr+nfr_offset[ids]}\n')
+                self.frames_lst.append(f'{ds_names[ids]} //{ifr+nfr_offset[ids]}\n')
 
         # Split frames list per slurm node and write to files
-        frames_lst_split = np.array_split(frames_lst, self.n_nodes_all)
+        frames_lst_split = np.array_split(self.frames_lst, self.n_nodes_all)
         print("Split into:", end='')
         for ich, sub_frames_lst in enumerate(frames_lst_split):
             print(f" {len(sub_frames_lst)}", end='')
@@ -944,13 +961,212 @@ class Workflow:
             utl.replace_cell(self.cell_file, refined_cell)
             self.cell_file = utl.get_refined_cell_name(self.cell_file)
 
+
+    def get_frame_counts(
+        self, frame_datasets: list
+        ) -> xr.DataArray:
+        """Generate DataArray table with overall frame rates for all
+        data and dataset in frame_datasets.
+        """
+        frames_lst = self.frames_lst
+        part_lst = frame_datasets
+        stream_file_1 = f'{self.list_prefix}.stream'
+        stream_file_2 = f"{self.list_prefix}_hits.stream"
+    
+        frame_ids = []
+        for line in frames_lst:
+            frame_id_data = line.strip().split(' //')
+            frame_ids.append((frame_id_data[0], int(frame_id_data[1])))
+    
+        frame_dsets = {}
+        for line in part_lst:
+            frame_dsets_data = line.strip().split()
+            frame_id = (frame_dsets_data[0], int(frame_dsets_data[1][2:]))
+            frame_dset = frame_dsets_data[2]
+            frame_dsets[frame_id] = frame_dset
+
+        with open(stream_file_1, 'r') as st_in:
+            stream_data_1 = cstr.read_crystfel_stream(st_in)
+        if stream_file_2 is not None:
+            with open(stream_file_2, 'r') as st_in:
+                stream_data_2 = cstr.read_crystfel_stream(st_in)
+        else:
+            stream_data_2 = stream_data_1
+
+        frame_counts = [
+            'N_frames', 'N_hits', 'N_indexed', 'hit_rate', 'index_rate']
+        dset_frame_counts = {}
+        for fr_id in frame_ids:
+            # Each frame belongs to ALL_DATASET and some dataset
+            dsets_list = [pspl.ALL_DATASET]
+            if fr_id in frame_dsets:
+                curr_dset = frame_dsets[fr_id]
+                dsets_list.append(curr_dset)
+
+            for dset in dsets_list:
+                if dset not in dset_frame_counts:
+                    dset_frame_counts[dset] = np.zeros((5))
+                dset_frame_counts[dset][0] += 1
+
+            if (fr_id in stream_data_1
+                and stream_data_1[fr_id]['hit'] == 1
+                ):
+                for dset in dsets_list:
+                    dset_frame_counts[dset][1] += 1
+
+            if (fr_id in stream_data_2
+                and stream_data_2[fr_id]['crystal'] is not None
+                ):
+                for dset in dsets_list:
+                    dset_frame_counts[dset][2] += 1
+        
+            for dset in dsets_list:
+                n_frames = dset_frame_counts[dset][0]
+                n_hits = dset_frame_counts[dset][1]
+                n_indexed = dset_frame_counts[dset][2]
+                if n_frames > 0:
+                    dset_frame_counts[dset][3] = n_hits / n_frames
+                    dset_frame_counts[dset][4] = n_indexed / n_frames
+                else:
+                    dset_frame_counts[dset][3] = 0.
+                    dset_frame_counts[dset][4] = 0.
+
+        dset_frame_counts_arr = np.array(list(dset_frame_counts.values()))
+        frame_counts = xr.DataArray(
+            dset_frame_counts_arr,
+            dims=["dataset", "frame_count"],
+            coords=[list(dset_frame_counts.keys()), frame_counts]
+        )
+        return frame_counts
+
+
+    def get_partialator_foms(
+        self, datasets: list, folder: str
+    ) -> xr.DataArray:
+        n_datasets = len(datasets)
+        part_foms_arr = np.zeros((n_datasets, 2, 5))
+        foms = ["Completeness", "Signal-over-noise", "CC_1/2", "CC*",
+                "R_split"]
+        foms_tag = ['completeness', 'completeness', 'CC', 'CCstar', 'Rsplit']
+        foms_log = ['', '<snr>', 'CC', 'CC*', 'Rsplit']
+        col_foms = [3, 6, 1, 1, 1]
+        col_nref = [1, 1, 2, 2, 2]
+
+        crystfel_import = cri.crystfel_info[self._crystfel_version]['import']
+
+        # There is a link to the cell file in the partialator folder
+        _, _, partialator_cell = utl.separate_path(self.cell_file)
+
+        for i_ds, dataset in enumerate(datasets):
+            if dataset == pspl.ALL_DATASET:
+                ds_suffix = ""
+            else:
+                ds_suffix = f"-{dataset}"
+
+            log_items = []
+            # create simple resolution-bin table
+            with open(f'{folder}/_tmp_table_gen.sh', 'w') as f:
+                f.write(tmp.CHECK_HKL_WRAP % {
+                    'IMPORT_CRYSTFEL': crystfel_import,
+                    'PREFIX': self.list_prefix,
+                    'DS_SUFFIX': ds_suffix,
+                    'POINT_GROUP': self.point_group,
+                    'UNIT_CELL': partialator_cell,
+                    'HIGH_RES': self.res_higher
+                })
+            out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
+                cwd=folder, stderr=subprocess.STDOUT)
+            log_items.extend(out.decode('utf-8').split())
+
+            # create resolution-bin tables based on half-sets
+            for i in range(2,5):
+                with open(f'{folder}/_tmp_table_gen{i}.sh', 'w') as f:
+                    f.write(tmp.COMPARE_HKL_WRAP % {
+                        'IMPORT_CRYSTFEL': crystfel_import,
+                        'PREFIX': self.list_prefix,
+                        'DS_SUFFIX': ds_suffix,
+                        'POINT_GROUP': self.point_group,
+                        'UNIT_CELL': partialator_cell,
+                        'HIGH_RES': self.res_higher,
+                        'FOM': foms_tag[i]
+                    })
+                out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
+                    cwd=folder, stderr=subprocess.STDOUT)
+                log_items.extend(out.decode('utf-8').split())
+
+            for fn in glob(f'{folder}/_tmp*'):
+                os.remove(fn)
+
+            for i_fom in range(5):
+                table = f"{self.list_prefix}_{foms_tag[i_fom]}{ds_suffix}.dat"
+                with open(f"{folder}/{table}", 'r') as f_table:
+                    table_lines = f_table.readlines()[1:]
+
+                c_fom = col_foms[i_fom]
+                c_ref = col_nref[i_fom]
+
+                if i_fom == 0:
+                    fom_all = utl.table_weighted_average(
+                        table_lines, c_fom, c_ref
+                    )
+                else:
+                    fom_all = float(
+                        log_items[log_items.index(foms_log[i_fom]) + 2]
+                    )
+                fom_outer = float(table_lines[-1].split()[c_fom])
+
+                part_foms_arr[i_ds, 0, i_fom] = fom_all
+                part_foms_arr[i_ds, 1, i_fom] = fom_outer
+
+        part_foms = xr.DataArray(
+            part_foms_arr,
+            coords=[datasets, ["overall", "outer shell"], foms],
+            dims=["dataset", "shell", "fom"]
+        )
+        return part_foms
+
+
     def merge_bragg_obs(self):
         """ Interface to the CrystFEL utilities for the 'merging' steps
         """
-
-        # Prepare a directory to store partialator input and output
+        # Prepare a folder to store partialator input and output
         part_dir = f"./partialator"
         utl.make_new_dir(part_dir)
+
+        # Prepare partialator list file(s) for splitting frames into datasets
+        frame_datasets = []
+        part_split_arg = ""
+        part_datasets = [pspl.ALL_DATASET]
+        if self.run_partialator_split:
+            print("Preparing list files to split frames into datasets.\n")
+            splitter_datasets = set()
+            ds_names = self.cxi_names if self.use_peaks else self.vds_names
+            for ds_run, ds_name in zip(self.data_runs, ds_names):
+                utl.make_link(ds_name, part_dir)
+                splitter = pspl.DatasetSplitter(
+                    self.data_proposal, ds_run, ds_name, part_dir,
+                    self.partialator_split_config
+                )
+                frame_datasets.extend(splitter.get_split_list())
+                splitter_datasets |= splitter.all_datasets
+            with open(f"{part_dir}/frame_datasets.plst", 'w') as f_out:
+                f_out.write("\n".join(frame_datasets))
+
+            frame_datasets_clean = pspl.clear_datasets(frame_datasets)
+            with open(f"{part_dir}/frame_datasets_clean.plst", 'w') as f_out:
+                f_out.write("\n".join(frame_datasets_clean))
+            part_split_arg = "--custom-split frame_datasets_clean.plst"
+            splitter_good_datasets = splitter_datasets - pspl.IGNORE_DATASETS
+            part_datasets += sorted(splitter_good_datasets)
+
+        # Report overall frame rates
+        frame_counts = self.get_frame_counts(frame_datasets)
+        frame_counts.to_netcdf(f"frame_counts.nc")
+        jlog.save_frame_counts(frame_counts, '.')
+        smr.report_frame_counts(frame_counts, self.list_prefix)
+
+        if self.interactive:
+            self.verify_merging_config()
         # Make links to the refined cell and output stream files
         utl.make_link(self.cell_file, part_dir)
         utl.make_link(f"{self.list_prefix}_hits.stream", part_dir)
@@ -965,44 +1181,17 @@ class Workflow:
                 'POINT_GROUP': self.point_group,
                 'N_ITER': self.scale_iter,
                 'MODEL': self.scale_model,
-                'MAX_ADU': self.max_adu
+                'MAX_ADU': self.max_adu,
+                'PARTIALATOR_SPLIT': part_split_arg
             })
         subprocess.check_output(['sh', '_tmp_partialator.sh'],
             cwd=part_dir, stderr=subprocess.STDOUT)
 
-        log_items = []
-        # create simple resolution-bin table
-        with open(f'{part_dir}/_tmp_table_gen.sh', 'w') as f:
-            f.write(tmp.CHECK_HKL_WRAP % {
-                'IMPORT_CRYSTFEL': crystfel_import,
-                'PREFIX': self.list_prefix,
-                'POINT_GROUP': self.point_group,
-                'UNIT_CELL': self.cell_file,
-                'HIGH_RES': self.res_higher
-            })
-        out = subprocess.check_output(['sh', '_tmp_table_gen.sh', 'w'],
-            cwd=part_dir, stderr=subprocess.STDOUT)
-        log_items.extend(out.decode('utf-8').split())
+        part_foms = self.get_partialator_foms(part_datasets, part_dir)
+        part_foms.to_netcdf(f"{part_dir}/datasets_foms.nc")
+        jlog.save_partialator_foms(part_foms, part_dir)
+        smr.report_merging_metrics(part_foms, self.list_prefix)
 
-        # create resolution-bin tables based on half-sets
-        for i in range(3):
-            with open(f'{part_dir}/_tmp_table_gen{i}.sh', 'w') as f:
-                f.write(tmp.COMPARE_HKL_WRAP % {
-                    'IMPORT_CRYSTFEL': crystfel_import,
-                    'PREFIX': self.list_prefix,
-                    'POINT_GROUP': self.point_group,
-                    'UNIT_CELL': self.cell_file,
-                    'HIGH_RES': self.res_higher,
-                    'FOM': ['CC', 'CCstar', 'Rsplit'][i],
-                    'FOM_TAG': ['cchalf', 'ccstar', 'rsplit'][i]
-                })
-            out = subprocess.check_output(['sh', f'_tmp_table_gen{i}.sh'],
-                cwd=part_dir, stderr=subprocess.STDOUT)
-            log_items.extend(out.decode('utf-8').split())
-
-        for fn in glob(f'{part_dir}/_tmp*'):
-            os.remove(fn)
-        smr.report_merging_metrics(part_dir, self.list_prefix, log_items)
 
     def process_late(self):
         """ Last pass of the workflow:
@@ -1023,11 +1212,12 @@ class Workflow:
         smr.report_total_rate(self.list_prefix, self.n_proc_frames_all)
         smr.report_cells(self.list_prefix, self.cell_info)
 
-        print('\n-----   TASK: scale/merge data and create statistics -----\n')
-        if self.interactive:
-            self.verify_merging_config()
-
-        self.merge_bragg_obs()
+        if self.run_partialator:
+            print('\n-----   TASK: scale/merge data and create statistics -----\n')
+            self.merge_bragg_obs()
+        else:
+            print("\nOmitting 'partialator' step since there is no 'merging' "
+                  "part in the config file.\n")
 
         # report all config parameters modified in the interactive mode
         smr.report_reconfig(self.list_prefix, self.overrides)

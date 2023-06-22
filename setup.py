@@ -50,12 +50,14 @@ setup(
     },
     install_requires=[
         'h5py',
+        'matplotlib',
         'numpy',
         'pandas',
         'scipy',
         'toml',
         'xarray',
         'findxfel>=0.1.1',
+        'extra_data>=1.4',
     ],
     extras_require={
         'docs': [],
