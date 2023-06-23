@@ -9,9 +9,7 @@ CONFIG = """\
 [data]
 proposal = 700000
 runs = [30]
-n_frames_total = 100000
-vds_names = ["xmpl_30_vds.cxi"]
-list_prefix = "xmpl_30"
+frames_range = {end = 100000}
 
 [crystfel]
 # Available versions: '0.8.0', '0.9.1', '0.10.1','cfel_dev'
@@ -25,8 +23,6 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
-duration_hits = "0:30:00"
-n_nodes_hits = 4
 
 [proc_coarse]
 resolution = 4.0
@@ -39,6 +35,7 @@ peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 n_cores = -1
 local_bg_radius = 3
+integration_radii = "2,3,5"
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
@@ -46,13 +43,6 @@ extra_options = "--no-non-hits-in-stream"
 [unit_cell]
 file = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/hewl.cell"
 run_refine = false
-
-[frame_filter]
-match_tolerance = 0.1
-
-[proc_fine]
-resolution = 2.0
-integration_radii = "2,3,5"
 
 [merging]
 point_group = "422"
@@ -65,11 +55,8 @@ ADV_CONFIG = """\
 [data]
 proposal = 700000
 runs = [30]
-n_frames_offset = 0
-n_frames_max = -1
-n_frames_percent = 100
-n_frames_total = 100000
-vds_names = ["xmpl_30_vds.cxi"]
+frames_range = {start = 0, end = -1, step = 1}
+vds_names = ["p700000_r0030_vds.h5"]
 cxi_names = ["p2304_r0108.cxi"]
 list_prefix = "xmpl_30"
 
@@ -93,8 +80,8 @@ file_path = "/gpfs/exfel/exp/XMPL/201750/p700000/proc/r0030/agipd_2120_v1_reform
 partition = "all"
 duration_all = "1:00:00"
 n_nodes_all = 10
-duration_hits = "0:30:00"
-n_nodes_hits = 4
+#duration_hits = "0:30:00"
+#n_nodes_hits = 4
 
 [proc_coarse]
 resolution = 4.0
@@ -107,6 +94,7 @@ peaks_hdf5_path = "entry_1/result_1"
 index_method = "mosflm"
 n_cores = -1
 local_bg_radius = 3
+integration_radii = "2,3,5"
 max_res = 1200
 min_peaks = 0
 extra_options = "--no-non-hits-in-stream"
@@ -119,8 +107,8 @@ run_refine = false
 match_tolerance = 0.1
 
 [proc_fine]
+execute = true
 resolution = 2.0
-integration_radii = "2,3,5"
 
 [partialator_split]
 execute = false
@@ -208,7 +196,7 @@ indexamajig \\
   --local-bg-radius=%(LOCAL_BG_RADIUS)s \\
   --max-res=%(MAX_RES)s \\
   --min-peaks=%(MIN_PEAKS)s \\
-%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s %(HARVEST_OPTION)s
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """
@@ -248,7 +236,7 @@ indexamajig \\
   --peaks=cxi \\
   --hdf5-peaks=%(PEAKS_HDF5_PATH)s \\
   --indexing=%(INDEX_METHOD)s \\
-%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s
+%(COPY_FIELDS)s  %(EXTRA_OPTIONS)s %(HARVEST_OPTION)s
 
 echo "LOG: finished on $(date +'%%m/%%d/%%Y') at $(date +'%%H:%%M:%%S')."
 """

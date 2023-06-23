@@ -1,9 +1,11 @@
 """Utilities"""
 
 from ast import Pass
+from copy import deepcopy
 from getpass import getuser
 from glob import glob
 import h5py
+import json
 import numpy as np
 import re
 from scipy.optimize import curve_fit
@@ -12,6 +14,8 @@ import subprocess
 import os, re, time
 from typing import Any, Type, Tuple, Collection
 import warnings
+
+import toml
 
 # Local imports
 from . import crystfel_info as cri
@@ -141,15 +145,29 @@ def calc_progress(out_logs, n_total, crystfel_version):
     return n_frames_total
 
 
-def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
-    """
-    Monitor slurm jobs and prepare progress bar.
+def wait_or_cancel(
+    job_id: str, job_dir: str, n_total: int, crystfel_version: str,
+    silent: bool
+    ) -> int:
+    """Monitor slurm jobs and prepare progress bar.
 
-    Args:
-        job_id (int): id of the slurm job-array.
-        job_dir (string): slurm processing directory.
-        n_total (int): total number of frames to be processed.
-        crystfel_version (string): version of the CrystFEL in use.
+    Parameters
+    ----------
+    job_id : str
+        Id of the slurm job-array.
+    job_dir : str
+        Slurm processing folder.
+    n_total : int
+        Total number of frames to be processed.
+    crystfel_version : str
+        Version of CrystFEL in use.
+    silent : bool
+        Whether to skip updating the progress bar.
+
+    Returns
+    -------
+    int
+        Total number of processed frames.
     """
     print(' Waiting for job-array', job_id)
     while True:
@@ -159,7 +177,8 @@ def wait_or_cancel(job_id, job_dir, n_total, crystfel_version):
             break
 
         out_logs = glob(f'{job_dir}/slurm-{job_id}_*.out')
-        calc_progress(out_logs, n_total, crystfel_version)
+        if not silent:
+            calc_progress(out_logs, n_total, crystfel_version)
 
         time.sleep(1)
     # To ensure all frames have been processed
@@ -285,6 +304,7 @@ def replace_cell(fn, const_values):
             f_out.write(new_cryst)
     else:
         warnings.warn(' Cell file is of unknown type (by extension)!')
+    return fn_refined
 
 
 def cell_as_string(cell_file):
@@ -550,26 +570,99 @@ def string_to_list(value: str) -> list:
     return result
 
 
-def string_to_type(value: str, val_type: Type) -> Any:
-    """Convert input string to val_type with special treatment of
-    boolean values"""
-    if val_type == bool:
-        if value == "True" or value == "true":
-            return True
-        elif value == "False" or value == "false":
-            return False
-        else:
-            raise ValueError(
-                "Only 'True' or 'False' can be converted to boolean.")
+def dict_list_broadcast(dict_list: list, n_elements:int) -> list:
+    """In case 'dict_list' has a single dictionary - broadcast it to
+    'n_elements' values."""
+    assert isinstance(dict_list, list), "Expecting a list of dictionaries."
+    n_dicts = len(dict_list)
+    if n_dicts == n_elements:
+        return dict_list
+    elif n_dicts != 1:
+        raise RuntimeError(
+            f"Cannot broadcast {n_dicts} dictionaries to {n_elements} values.")
     else:
-        return val_type(value)
+        dict_list_res = deepcopy(dict_list)
+        for _ in range(n_elements - 1):
+            dict_list_res.append(dict_list[0].copy())
+        return dict_list_res
 
 
-def list_to_re(str_list: Collection) -> str:
-    """Convert input representing collection of strings into a regular
-    expression matching any of the input strings."""
-    re_list = [f'^{val}$' for val in str_list]
-    return r'|'.join(re_list)
+def dict_list_update_default(dict_list: list, default: dict) -> list:
+    """Update a list of dictionaries with the default dictionary values.
+
+    Parameters
+    ----------
+    dict_list : list
+        Input list of dictionaries.
+    default : dict
+        Dictionary of the default values.
+
+    Returns
+    -------
+    list
+        List of the input dictionaries updated with the default values.
+    """
+    dict_list_res = []
+    for i_dict in range(len(dict_list)):
+        dict_list_res.append(default.copy())
+        dict_list_res[i_dict].update(dict_list[i_dict])
+        # Cross check for unexpected keys
+        for key in dict_list[i_dict]:
+            if key not in default:
+                print(f"Unexpected key: '{key}'. Default: {default.keys()}.")
+    return dict_list_res
+
+
+def user_input_toml(message: str, default: Any) -> Tuple[bool, Any]:
+    """Request user input for a toml configuration parameter.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case of the wrong input.
+
+    Returns
+    -------
+    Tuple[bool, Any]
+        bool
+            Whether an input from the user have been accepted.
+        Any
+            An input from the user (or default value in case of the
+            wrong input.
+    """
+    # To display dictionaries and booleans in a style acceptable for toml
+    default_str = str(default)
+    if '{' in default_str:
+        default_str = default_str.replace("': ", "' = ")
+        default_str = default_str.replace("'start'", "start")
+        default_str = default_str.replace("'end'", "end")
+        default_str = default_str.replace("'step'", "step")
+    default_str = default_str.replace('False', 'false').replace('True', 'true')
+
+    usr_inp = input(f'{message} [{default_str}] > ').strip()
+    if usr_inp == '':
+        return False, default
+
+    # Allow user to input single strings without quotation marks
+    if ((isinstance(default, str)
+        or isinstance(default, list) and isinstance(default[0], str))
+        and usr_inp[0] not in "['\""
+        ):
+        return True, usr_inp
+
+    # Using toml to decode input values
+    usr_inp_str = "input = " + usr_inp
+    try:
+        usr_inp_dict = toml.loads(usr_inp_str)
+    except toml.TomlDecodeError:
+        warnings.warn(
+            f"Value '{usr_inp}' cannot be decoded by toml;"
+            f" kept at default.")
+        return False, default
+    else:
+        return True, usr_inp_dict['input']
 
 
 def user_input_str(
@@ -586,7 +679,7 @@ def user_input_str(
         Default value to return in case user does not provide the input
         or it does not match the regular expression.
     re_format : str, optional
-        Regular expresion to be matched, by default None.
+        Regular expression to be matched, by default None.
 
     Returns
     -------
@@ -595,19 +688,18 @@ def user_input_str(
             Whether an input from the user have been accepted.
         str
             An input from the user in case it satisfies the regular
-            expresion, otherwise the default value.
+            expression, otherwise the default value.
     """
-    usr_inp = input(f'{message} [{default}] > ').strip()
-    if usr_inp != '':
-        if re_format is None or re.match(re_format, usr_inp):
-            return True, usr_inp
-        else:
-            warnings.warn(
-                f"Does not satisfy expected format: r'{re_format}'; "
-                "kept at default."
-            )
-            return False, default
+    accepted, usr_inp = user_input_type(message, default, str)
+    if not accepted:
+        return False, default
+
+    if re_format is None or re.match(re_format, usr_inp):
+        return True, usr_inp
     else:
+        warnings.warn(
+            f"Does not satisfy expected format: r'{re_format}'; "
+            f"kept at default.")
         return False, default
 
 
@@ -635,16 +727,16 @@ def user_input_type(
             An input from the user in case it can be converted to the
             specified type, otherwise the default value.
     """
-    re_format = None
-    if val_type == bool:
-        re_format = r'^[Tt]rue$|^[Ff]alse$'
-    accepted, usr_inp = user_input_str(message, default, re_format)
+    accepted, usr_inp = user_input_toml(message, default)
     if accepted:
-        try:
-            return True, string_to_type(usr_inp, val_type)
-        except ValueError:
-            warnings.warn('Wrong type; kept at default.')
-            return False, default
+        if isinstance(usr_inp, val_type):
+            return True, usr_inp
+        else:
+            try:
+                return True, val_type(usr_inp)
+            except ValueError:
+                warnings.warn('Wrong input type; kept at default.')
+                return False, default
     else:
         return False, default
 
@@ -682,9 +774,9 @@ def user_input_list(
             type, or the default value in case user's input cannot be
             converted.
     """
-    accepted, usr_inp = user_input_str(message, default)
+    accepted, usr_inp = user_input_toml(message, default)
     if accepted:
-        usr_inp = string_to_list(usr_inp)
+        usr_inp = into_list(usr_inp)
         n_inp = len(usr_inp)
         if ((n_elements > 0) and (n_inp != n_elements)
             and (not broadcastable or n_inp != 1)):
@@ -694,7 +786,7 @@ def user_input_list(
             )
             return False, default
         try:
-            return True, [string_to_type(val, val_type) for val in usr_inp]
+            return True, [val_type(val) for val in usr_inp]
         except ValueError:
             warnings.warn('Wrong type; kept at default.')
             return False, default
@@ -726,8 +818,8 @@ def user_input_path(
             otherwise the default value.
     """
     while True:
-        accepted, usr_inp = user_input_str(message, default)
-        if accepted:
+        accepted, usr_inp = user_input_toml(message, default)
+        if accepted and isinstance(usr_inp, str):
             if os.path.exists(usr_inp):
                 return True, usr_inp
             elif default is not None:
@@ -740,6 +832,42 @@ def user_input_path(
             return False, default
         else:
             print("Please provide an existing path.")
+
+
+def user_input_choice(
+    message: str, default: Any, options: list
+    ) -> Tuple[bool, Any]:
+    """Request user input and check if it corresponds to one of the
+    values in 'options'.
+
+    Parameters
+    ----------
+    message : str
+        Message to be displayed to the user.
+    default : Any
+        Default value to return in case of the wrong input.
+    options : list
+        List of the appropriate value options.
+
+    Returns
+    -------
+    Tuple[bool, Any]
+        bool
+            Whether an input from the user have been accepted.
+        Any
+            An input from the user (or default value in case of the
+            inappropriate input.
+    """
+    accepted, usr_inp = user_input_toml(message, default)
+    if accepted:
+        if usr_inp in options:
+            return True, usr_inp
+        else:
+            warnings.warn(
+                f'Input has to be one of {options}; kept at default.')
+            return False, default
+    else:
+        return False, default
 
 
 def table_weighted_average(
