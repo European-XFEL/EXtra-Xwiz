@@ -19,8 +19,9 @@ ALL_DATASET = "all_data"
 IGNORE_DATASETS = {'unknown', 'ignore'}
 
 def plot_adc_signal(
-    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float,
-    pulse_ids: np.ndarray, laser_align: int, laser_per_pulse: np.ndarray
+    xray_signal: np.ndarray, laser_signal: np.ndarray, threshold: float=None,
+    pulse_ids: np.ndarray=None, laser_align: int=0,
+    laser_per_pulse: np.ndarray=None
 ) -> Figure:
     """Prepare a figure with X-ray pulses and laser state signal.
 
@@ -30,15 +31,18 @@ def plot_adc_signal(
         Array with X-ray pulses fastADC signal.
     laser_signal : np.ndarray
         Array with PP laser pattern fastADC signal.
-    threshold : float
+    threshold : float, optional
         Threshold (in arbitrary intensity units) to separate diode
-        signal from the background.
-    pulse_ids : np.ndarray
+        signal from the background. By default None.
+    pulse_ids : np.ndarray, optional
         Array of pulse peaks positions in the fastADC data.
-    laser_align : int
+        By default None.
+    laser_align : int, optional
         Shift between PP laser and X-ray pulses signals.
-    laser_per_pulse : np.ndarray
+        By default 0.
+    laser_per_pulse : np.ndarray, optional
         Boolean array with laser state per pulse peak.
+        By default None.
 
     Returns
     -------
@@ -62,31 +66,40 @@ def plot_adc_signal(
         ['royalblue', 'darkorange']
     ):
         ax.plot(x, dataset, color=color)
-        ax.plot(
-            [0, n_samples], [threshold, threshold], color='lightcoral',
-            linestyle='-.'
-        )
+
+        if threshold is not None:
+            ax.plot(
+                [0, n_samples], [threshold, threshold], color='lightcoral',
+                linestyle='-.'
+            )
 
         ax.set_xlim(0, n_samples)
         ax.set_ylim(min_y-offset_y, max_y+offset_y)
         ax.set_title(label)
         ax.set_ylabel('Intensity')
 
-    axes[0].plot(
-        pulse_ids, xray_signal[pulse_ids], color='limegreen', marker="o",
-        markersize=4, linestyle='None'
-    )
-    true_ids = pulse_ids[np.where(laser_per_pulse)[0]] + laser_align
-    false_ids = (pulse_ids[np.where(np.logical_not(laser_per_pulse))[0]]
-                 + laser_align)
-    axes[1].plot(
-        true_ids, laser_signal[true_ids], color='limegreen', marker="o",
-        markersize=4, linestyle='None'
-    )
-    axes[1].plot(
-        false_ids, laser_signal[false_ids], color='firebrick', marker="o",
-        markersize=4, linestyle='None'
-    )
+    if pulse_ids is not None:
+        axes[0].plot(
+            pulse_ids, xray_signal[pulse_ids], color='limegreen', marker="o",
+            markersize=4, linestyle='None'
+        )
+        if laser_per_pulse is None:
+            laser_pulse_ids = pulse_ids + laser_align
+            axes[1].plot(
+                laser_pulse_ids, laser_signal[laser_pulse_ids],
+                color='royalblue', marker="o", markersize=4, linestyle='None'
+            )
+        else:
+            true_ids = pulse_ids[laser_per_pulse == 1] + laser_align
+            false_ids = pulse_ids[laser_per_pulse == 0] + laser_align
+            axes[1].plot(
+                true_ids, laser_signal[true_ids], color='limegreen',
+                marker="o", markersize=4, linestyle='None'
+            )
+            axes[1].plot(
+                false_ids, laser_signal[false_ids], color='firebrick',
+                marker="o", markersize=4, linestyle='None'
+            )
     axes[1].set_xlabel('ADC sample #')
 
     return fig
@@ -94,10 +107,29 @@ def plot_adc_signal(
 
 def get_adc_threshold(signal: np.ndarray) -> float:
     """Estimate threshold in arbitrary intensity units to separate diode
-    signal from the background. Set to 5% of the difference between
-    signal minimum and maximum values."""
-    th_percent = 0.05
-    return np.max(signal)*th_percent + np.min(signal)*(1-th_percent)
+    signal from the background. Set to 20 sigma from the background
+    distribution."""
+    sigma_cut = 20.0
+    sigma_quantile = 0.15865
+    quantiles = [sigma_quantile, 0.5, 1-sigma_quantile]
+    quant_values = np.quantile(signal, quantiles)
+    median_value = quant_values[1]
+    sigma_value = (quant_values[2] - quant_values[0]) / 2
+
+    signal_min_cut = int(median_value - sigma_cut*sigma_value)
+    signal_min = np.min(signal)
+    if signal_min < signal_min_cut:
+        raise ValueError(
+            f"FastADC signal below {sigma_cut} sigma cut: min. value "
+            f"{signal_min} < min. cut {signal_min_cut}.")
+
+    signal_max_cut = int(median_value + sigma_cut*sigma_value)
+    signal_max = np.max(signal)
+    if signal_max <= signal_max_cut:
+        # Whole distribution within +-sigma_cut, cannot set a threshold
+        return None
+    else:
+        return signal_max_cut
 
 
 def align_adc_signal(signal: np.ndarray, peak_ids: np.ndarray) -> int:
@@ -183,7 +215,10 @@ def get_laser_state_from_diode(
         xray_signal = np.array(data[xray_signal_src[0]][xray_signal_src[1]])
         laser_signal = np.array(data[laser_signal_src[0]][laser_signal_src[1]])
 
-        threshold = get_adc_threshold(xray_signal)
+        xray_threshold = get_adc_threshold(xray_signal)
+        laser_threshold = get_adc_threshold(laser_signal)
+        threshold = utl.nanmax(xray_threshold, laser_threshold)
+
         pulses_thr = np.array(xray_signal) > threshold
         laser_thr = np.array(laser_signal) > threshold
 
@@ -313,7 +348,8 @@ class DatasetSplitter:
         else:
             self.ignore_trains = []
 
-        data_ignore_trains = set(self.incomplete_trains) | set(self.ignore_trains)
+        data_ignore_trains = set(self.ignore_trains)
+        data_ignore_trains |= set(self.incomplete_trains)
 
         self.mode = split_config['mode']
         if self.mode in ['on_off', 'on_off_numbered']:
@@ -354,29 +390,32 @@ class DatasetSplitter:
 
     def get_trains_array(self) -> np.ndarray:
         """Prepare an array with all train ids in the stored data."""
-        trains_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
-        return self.frame_trains[trains_pos]
+        train_pos = np.where(np.roll(self.frame_trains,1)!=self.frame_trains)
+        return self.frame_trains[train_pos]
 
     def get_pulses_array(self) -> np.ndarray:
         """Estimate array of the pulse id values from the stored
         detector data."""
-        trains_pos = np.append(
+        # Positions of unique train ids (append) the number of frames
+        train_pos = np.append(
             np.where(np.roll(self.frame_trains,1) != self.frame_trains),
             self.frame_trains.shape[0]
         )
-        trains_pos_diff = np.ediff1d(trains_pos)
-        n_pulses = round(np.median(trains_pos_diff))
+        # An array of differences between positions of unique train ids
+        # This correspond to the number of pulses in each train
+        train_pos_diff = np.ediff1d(train_pos)
+        n_pulses = round(np.median(train_pos_diff))
 
-        incomplete_trains_pos = trains_pos[np.where(trains_pos_diff != n_pulses)]
-        self.incomplete_trains = self.frame_trains[incomplete_trains_pos]
+        incomplete_train_pos = train_pos[np.where(train_pos_diff != n_pulses)]
+        self.incomplete_trains = self.frame_trains[incomplete_train_pos]
         if self.incomplete_trains.shape[0] != 0:
             warnings.warn(
                 f"Expected {n_pulses} pulses in each train, but different "
                 f"n_pulses found for train(s) "
                 f"{', '.join([str(tid) for tid in self.incomplete_trains])}.")
 
-        for train_pos in trains_pos:
-            if train_pos not in incomplete_trains_pos:
+        for train_pos in train_pos:
+            if train_pos not in incomplete_train_pos:
                 pulses_array = self.frame_pulses[train_pos:train_pos+n_pulses]
                 break
         else:
@@ -410,7 +449,7 @@ class DatasetSplitter:
         elif self.mode == 'on_off_numbered':
             state_base = self.decode_state(train_id, pulse_id)
             if state_base in ['off', 'on']:
-                state_array = np.array(self.laser_state.loc[train_id,:pulse_id])
+                state_array = np.array(self.laser_state.loc[train_id:pulse_id])
                 state_change = np.where(np.roll(state_array,1)!=state_array)[0]
                 if state_change.shape[0] > 0:
                     state_num = state_array.shape[0] - state_change[-1]
