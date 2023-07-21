@@ -334,7 +334,7 @@ class DatasetSplitter:
             if '/entry_1/pulseId' in vds_f:
                 self.frame_pulses = np.array(vds_f['/entry_1/pulseId'])
             else:
-                self.frame_pulses = np.array(vds_f['/entry_1/cellId'])
+                self.frame_pulses = np.array(vds_f['/entry_1/memoryCell'])
             self.n_frames = self.frame_trains.shape[0]
         self.trains_array = self.get_trains_array()
         self.pulses_array = self.get_pulses_array()
