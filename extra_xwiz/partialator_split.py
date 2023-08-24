@@ -449,7 +449,9 @@ class DatasetSplitter:
         elif self.mode == 'on_off_numbered':
             state_base = self.decode_state(train_id, pulse_id)
             if state_base in ['off', 'on']:
-                state_array = np.array(self.laser_state.loc[train_id:pulse_id])
+                state_array = np.array(
+                    self.laser_state.loc[train_id,0:pulse_id]
+                )
                 state_change = np.where(np.roll(state_array,1)!=state_array)[0]
                 if state_change.shape[0] > 0:
                     state_num = state_array.shape[0] - state_change[-1]
