@@ -171,24 +171,37 @@ class Workflow:
         else:
             self.n_nodes_all = conf['slurm']['n_nodes_all']
             self.duration_all = conf['slurm']['duration_all']
-        self.res_lower = conf['proc_coarse']['resolution']
-        self.peak_method = conf['proc_coarse']['peak_method']
-        self.peak_threshold = conf['proc_coarse']['peak_threshold']
-        self.peak_snr = conf['proc_coarse']['peak_snr']
-        self.peak_min_px = conf['proc_coarse']['peak_min_px']
-        self.peak_max_px = conf['proc_coarse']['peak_max_px']
-        self.peaks_path = conf['proc_coarse']['peaks_hdf5_path']
-        self.index_method = conf['proc_coarse']['index_method']
-        self.local_bg_radius = conf['proc_coarse']['local_bg_radius']
-        if 'integration_radii' in conf['proc_coarse']:
-            self.integration_radii = conf['proc_coarse']['integration_radii']
+
+        if 'indexamajig_run' in conf:
+            conf_indexamajig_0 = conf['indexamajig_run']
+        elif 'proc_coarse' in conf:
+            warnings.warn(
+                "Configuration block 'proc_coarse' has been renamed to "
+                "'indexamajig_run', please use the new name in the future."
+            )
+            conf_indexamajig_0 = conf['proc_coarse']
+        else:
+            raise ValueError(
+                "Missing mandatory 'indexamajig_run' configuration block.")
+        self.res_lower = conf_indexamajig_0['resolution']
+        self.peak_method = conf_indexamajig_0['peak_method']
+        self.peak_threshold = conf_indexamajig_0['peak_threshold']
+        self.peak_snr = conf_indexamajig_0['peak_snr']
+        self.peak_min_px = conf_indexamajig_0['peak_min_px']
+        self.peak_max_px = conf_indexamajig_0['peak_max_px']
+        self.peaks_path = conf_indexamajig_0['peaks_hdf5_path']
+        self.index_method = conf_indexamajig_0['index_method']
+        self.local_bg_radius = conf_indexamajig_0['local_bg_radius']
+        if 'integration_radii' in conf_indexamajig_0:
+            self.integration_radii = conf_indexamajig_0['integration_radii']
         else:
             self.integration_radii = conf['proc_fine']['integration_radii']
-            warnings.warn("Please move 'integration_radii' to 'proc_coarse'.")
-        self.max_res = conf['proc_coarse']['max_res']
-        self.min_peaks = conf['proc_coarse']['min_peaks']
-        self.indexamajig_n_cores = conf['proc_coarse']['n_cores']
-        self.indexamajig_extra_options = conf['proc_coarse']['extra_options']
+            warnings.warn(
+                "Please move 'integration_radii' to 'indexamajig_run'.")
+        self.max_res = conf_indexamajig_0['max_res']
+        self.min_peaks = conf_indexamajig_0['min_peaks']
+        self.indexamajig_n_cores = conf_indexamajig_0['n_cores']
+        self.indexamajig_extra_options = conf_indexamajig_0['extra_options']
 
         if 'file_path' in conf['unit_cell']:
             self.cell_file = conf['unit_cell']['file_path']

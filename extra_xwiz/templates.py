@@ -26,7 +26,7 @@ reservation = "none"
 duration_all = "1:00:00"
 n_nodes_all = 10
 
-[proc_coarse]
+[indexamajig_run]
 resolution = 4.0
 peak_method = "peakfinder8"
 peak_threshold = 800
@@ -88,7 +88,7 @@ n_nodes_all = 10
 #duration_hits = "0:30:00"
 #n_nodes_hits = 4
 
-[proc_coarse]
+[indexamajig_run]
 resolution = 4.0
 peak_method = "peakfinder8"
 peak_threshold = 800
