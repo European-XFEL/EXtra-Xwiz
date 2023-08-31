@@ -190,7 +190,17 @@ class Workflow:
         self.indexamajig_n_cores = conf['proc_coarse']['n_cores']
         self.indexamajig_extra_options = conf['proc_coarse']['extra_options']
 
-        self.cell_file = conf['unit_cell']['file']
+        if 'file_path' in conf['unit_cell']:
+            self.cell_file = conf['unit_cell']['file_path']
+        elif 'file' in conf['unit_cell']:
+            warnings.warn(
+                "Configuration option 'unit_cell.file' is deprecated, please "
+                "specify unit cell file as 'unit_cell.file_path' instead."
+            )
+            self.cell_file = conf['unit_cell']['file']
+        else:
+            raise ValueError("Missing 'unit_cell.file_path' config parameter.")
+
         self.cell_run_refine = conf['unit_cell']['run_refine']
 
         if ('proc_fine' not in conf
