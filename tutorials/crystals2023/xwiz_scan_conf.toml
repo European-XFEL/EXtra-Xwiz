@@ -1,0 +1,22 @@
+[settings]
+
+xwiz_config = '/gpfs/exfel/data/user/turkot/LWork/Papers/n2307_Crystals/Xwiz_demo/xwiz/r_01/xwiz_conf.toml'
+log_completion = 20
+
+[xwiz]
+path_parameters = [
+    'geom.file_path',
+    'unit_cell.file_path'
+]
+
+
+[scan.peak_snr]
+  'indexamajig_run.peak_snr' = {start = 3, end = 7, step = 2}
+  'indexamajig_run.peak_threshold' = [1000, 800, 700]
+
+
+[output.store_xarray]
+  output_file = "scan_data.nc"
+
+[output.store_csv]
+  output_file = "scan_data.csv"

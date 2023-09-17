@@ -1,0 +1,60 @@
+[data]
+proposal = 700000
+runs = [30]
+frames_range = {start = 0, end = -1, step = 1}
+
+[crystfel]
+# Available versions: '0.8.0', '0.9.1', '0.10.2', 'maxwell_dev'
+version = '0.10.2'
+
+[geom]
+file_path = "agipd_p700000_r0030.geom"
+
+[slurm]
+# Available partitions: 'local', 'all', 'upex', 'exfel'
+partition = "exfel"
+# In case you have slurm nodes reservation
+reservation = "none"
+duration_all = "1:00:00"
+n_nodes_all = 20
+
+[indexamajig_run]
+resolution = 1.6
+peak_method = "peakfinder8"
+peak_threshold = 800
+peak_snr = 5
+peak_min_px = 1
+peak_max_px = 2
+peaks_hdf5_path = "entry_1/result_1"
+index_method = "mosflm"
+n_cores = -1
+local_bg_radius = 3
+integration_radii = "2,3,5"
+max_res = 1600
+min_peaks = 10
+extra_options = "--no-non-hits-in-stream"
+
+[partialator_split]
+execute = false
+# Available modes: "on_off", "on_off_numbered", "by_pulse_id", "by_train_id"
+mode = "by_pulse_id"
+
+# Required only for "on_off" or "on_off_numbered" modes:
+xray_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_0.output", "data.rawData"]
+laser_signal = ["SPB_LAS_SYS/ADC/UTC1-1:channel_1.output", "data.rawData"]
+plot_signal = true
+
+# Required only for "by_pulse_id" or "by_train_id" mode:
+[partialator_split.manual_datasets]
+  my_on = {start=0, end=-1, step=24}
+  my_off = [{start=8, step=24}, {start=16, step=24}]
+
+[unit_cell]
+file_path = "hewl.cell"
+run_refine = false
+
+[merging]
+point_group = "422"
+scaling_model = "unity"
+scaling_iterations = 1
+max_adu = 100000
